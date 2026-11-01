@@ -16,6 +16,8 @@ from .monitor import Monitor
 from .catalog import GAMES, COUNTRIES, AU_STATES, matches
 from .news import NewsMonitor
 from .panels import NewsPage, AnalyticsPage
+from .additions import Directory,Compare,Calendar,VariantPicker,delivery_editor
+from .desktop import Desktop
 
 BG = '#0d1321'
 PANEL = '#151f32'
@@ -63,7 +65,16 @@ class WatchDialog(tk.Toplevel):
         self.restock = tk.BooleanVar(value=bool((existing or {}).get('restock', True)))
         ttk.Checkbutton(frame, text='Notify on confirmed sold out → in stock', variable=self.restock).grid(row=12, columnspan=2, sticky='w', pady=15)
         ttk.Label(frame, text='Group only identical set, language, edition and pack quantity.\nTargets use item + shipping when shipping is known.\nStore tags describe location, not delivery eligibility.\nFor Shopify options, copy the URL after choosing a variant.', style='Muted.TLabel').grid(row=13, columnspan=2, sticky='w')
+        if not existing:
+            ttk.Button(frame,text='Pick Shopify variant',command=self.pick_variant).grid(row=14,column=0,sticky='w',pady=8)
         ttk.Button(frame, text='Save watch', command=self.save, style='Accent.TButton').grid(row=14, column=1, sticky='e', pady=(18, 0))
+
+    def pick_variant(self):
+        def chosen(option):
+            if self.winfo_exists():
+                self.vars['url'].set(option['url'])
+                if not self.vars['label'].get():self.vars['label'].set(option['title'])
+        VariantPicker(self.master,self.vars['url'].get(),chosen,owner=self)
 
     def save(self):
         try:
@@ -89,6 +100,8 @@ class App(tk.Tk):
         self.db = db
         self.monitor = Monitor(db)
         self.news_monitor = NewsMonitor(db, self.monitor.events)
+        self.desktop=Desktop(self.monitor.events)
+        self._closing=False
         self.title('TCG Alerts • sealed product radar')
         self.geometry('1360x900')
         self.minsize(1100, 760)
@@ -105,10 +118,11 @@ class App(tk.Tk):
         self.search.trace_add('write', lambda *_: self.refresh())
         self.build()
         self.refresh()
-        self.protocol('WM_DELETE_WINDOW', self.close)
+        self.protocol('WM_DELETE_WINDOW', self.request_close)
         if start_monitor:
             self.monitor.start()
             self.news_monitor.start()
+            self.desktop.start()
         self.after(250, self.drain)
 
     def style_ui(self):
@@ -144,7 +158,7 @@ class App(tk.Tk):
         header = ttk.Frame(outer)
         header.pack(fill='x')
         ttk.Label(header, text='TCG / ALERTS', style='Heading.TLabel').pack(side='left')
-        ttk.Label(header, text='LOCAL DESKTOP  •  v0.2', style='Muted.TLabel').pack(side='right')
+        ttk.Label(header, text='LOCAL DESKTOP  •  v0.3', style='Muted.TLabel').pack(side='right')
         ttk.Label(outer, text='Your sealed product radar.', style='Title.TLabel').pack(anchor='w', pady=(24, 6))
         ttk.Label(outer, text='Track the exact product. See the evidence. Catch your price.', style='Muted.TLabel').pack(anchor='w')
         metrics = ttk.Frame(outer)
@@ -188,23 +202,26 @@ class App(tk.Tk):
         self.table.bind('<Double-1>', lambda e: self.open_store())
         actions = ttk.Frame(watch_page)
         actions.pack(fill='x', pady=10)
-        for text, command in [('Open store ↗', self.open_store), ('Edit', self.edit), ('Pause / resume', self.toggle), ('History', self.show_history), ('Remove', self.remove)]:
+        for text, command in [('Open store ↗', self.open_store), ('Edit', self.edit), ('Delivery & units',self.edit_delivery), ('Pause / resume', self.toggle), ('History', self.show_history), ('Remove', self.remove)]:
             ttk.Button(actions, text=text, command=command).pack(side='left', padx=(0, 8))
         self.detail = tk.StringVar(value='Add a product URL to start. No sample prices are shown as live data.')
         ttk.Label(watch_page, textvariable=self.detail, style='Muted.TLabel', wraplength=1120).pack(anchor='w', pady=8)
         alerts_page = ttk.Frame(self.tabs)
         self.tabs.add(alerts_page, text='Alerts')
         self.alert_table = self.make_table(alerts_page, [('at', 'Time (local)', 170), ('kind', 'Trigger', 90), ('message', 'Alert', 800)])
-        compare = ttk.Frame(self.tabs, padding=18)
-        self.tabs.add(compare, text='Compare')
-        ttk.Label(compare, text='Compare identical products', style='Heading.TLabel').pack(anchor='w')
-        ttk.Label(compare, text='Set the same comparison group on exact matches. Currencies stay separate.\nUnknown shipping is never assumed free. Paused, failed or stale listings are excluded.', style='Muted.TLabel').pack(anchor='w', pady=12)
-        self.compare_table = self.make_table(compare, [('group', 'Group / currency', 220), ('store', 'Store', 180), ('item', 'Item', 100), ('shipping', 'Shipping', 110), ('total', 'Delivered', 110)])
+        self.compare_page=Compare(self,self.tabs)
+        self.tabs.add(self.compare_page,text='Compare')
+        self.compare_table=self.compare_page.table
         self.analytics_page = AnalyticsPage(self, self.tabs)
         self.tabs.add(self.analytics_page, text='Analytics')
         self.news_page = NewsPage(self, self.tabs)
         self.tabs.add(self.news_page, text='News')
+        self.calendar_page=Calendar(self,self.tabs)
+        self.tabs.add(self.calendar_page,text='Calendar')
+        self.directory_page=Directory(self,self.tabs)
+        self.tabs.add(self.directory_page,text='Stores')
         discovery = ttk.Frame(self.tabs, padding=18)
+        self.discovery_page=discovery
         self.tabs.add(discovery, text='Discover')
         ttk.Label(discovery, text='Find products on a store page', style='Heading.TLabel').pack(anchor='w')
         ttk.Label(discovery, text='Paste a collection URL. This reads one page, then lets you choose exact listings to track.\nResults are links, not verified products or prices. Pagination and JavaScript-only pages need manual URLs.', style='Muted.TLabel').pack(anchor='w', pady=10)
@@ -219,7 +236,15 @@ class App(tk.Tk):
         settings = ttk.Frame(self.tabs, padding=20)
         self.tabs.add(settings, text='Settings & data')
         ttk.Label(settings, text='Private by default.', style='Heading.TLabel').pack(anchor='w')
-        ttk.Label(settings, text='Checks run every 15 minutes while this app is open. Sleeping or closing the PC stops checks.\nFailures back off automatically. Manual checks respect the scheduled cooldown.\nAlerts appear here and ring the app bell. Email, Telegram and system tray are planned.\nThe app reads public Shopify product data and single-offer JSON-LD pages.\nIt respects robots.txt and does not bypass login, CAPTCHA or blocked storefronts.\n\nYour database: ' + str(self.db.path), style='Muted.TLabel', wraplength=1000).pack(anchor='w', pady=18)
+        ttk.Label(settings, text='Checks run every 15 minutes while this app is open. Sleeping or closing the PC stops checks.\nFailures back off automatically. Manual checks respect the scheduled cooldown.\nAlerts are saved here and ring the bell. Windows native tray notifications are supported; email/Telegram are not configured.\nThe app reads public Shopify product data and single-offer JSON-LD pages.\nIt respects robots.txt and does not bypass login, CAPTCHA or blocked storefronts.\n\nYour database: ' + str(self.db.path), style='Muted.TLabel', wraplength=1000).pack(anchor='w', pady=18)
+        self.native_enabled=tk.BooleanVar(value=self.db.setting('native_notifications',True))
+        self.close_to_tray=tk.BooleanVar(value=self.db.setting('close_to_tray',False))
+        ttk.Checkbutton(settings,text='Native Windows notifications',variable=self.native_enabled,command=self.save_native).pack(anchor='w',pady=4)
+        ttk.Checkbutton(settings,text='Closing minimizes to tray (when ready)',variable=self.close_to_tray,command=self.save_native).pack(anchor='w',pady=4)
+        buttons=ttk.Frame(settings);buttons.pack(anchor='w',pady=8)
+        for title,action in [('Minimize to tray',self.minimize_to_tray),('Test notification',self.test_notification),('Exit application',self.close)]:ttk.Button(buttons,text=title,command=action).pack(side='left',padx=(0,8))
+        self.native_status=tk.StringVar(value='Closing exits by default. Tray initializes on Windows when monitoring starts.')
+        ttk.Label(settings,textvariable=self.native_status,style='Muted.TLabel',wraplength=1050).pack(anchor='w',pady=4)
         ttk.Button(settings, text='Export watchlist CSV', command=self.export).pack(anchor='w', pady=6)
         ttk.Button(settings, text='Back up complete database', command=self.backup).pack(anchor='w', pady=6)
         ttk.Label(outer, textvariable=self.status, style='Muted.TLabel').pack(anchor='w', pady=(12, 0))
@@ -339,12 +364,9 @@ class App(tk.Tk):
             if str(a['watch_id']) not in self.rows:
                 continue
             self.alert_table.insert('', 'end', values=(self.local(a['at']), a['kind'], a['message']))
-        self.compare_table.delete(*self.compare_table.get_children())
-        eligible = [w for w in watches if w['group_name'] and self.healthy(w) and w['stock'] == 'in_stock']
-        eligible.sort(key=lambda w: (w['group_name'].lower(), w['currency'], w['shipping'] is None, w['price'] + (w['shipping'] or 0)))
-        for w in eligible:
-            total = w['price'] + w['shipping'] if w['shipping'] is not None else None
-            self.compare_table.insert('', 'end', values=(w['group_name'] + ' / ' + w['currency'], urlsplit(w['url']).netloc, self.cash(w['price']), self.cash(w['shipping']) if w['shipping'] is not None else 'Unknown', self.cash(total)))
+        self.compare_page.refresh()
+        self.calendar_page.refresh()
+        self.directory_page.refresh()
         self.selection()
         self.analytics_page.refresh()
         self.news_page.refresh()
@@ -357,6 +379,9 @@ class App(tk.Tk):
         w = self.selected()
         if w:
             self.detail.set(w['game'] + ' • Store: ' + w['country'] + ' / ' + w['state'] + ' • ' + w['url'] + '\n' + (w['error'] or f"Source: {w['source'] or 'pending'} • Shipping: {self.cash(w['shipping']) if w['shipping'] is not None else 'unknown'} • Last attempt: {self.local(w['attempted'])}"))
+
+    def edit_delivery(self):
+        if w:=self.selected():delivery_editor(self,w)
 
     def changed(self):
         self.refresh()
@@ -417,7 +442,7 @@ class App(tk.Tk):
         if path:
             try:
                 rows = self.db.watches()
-                keys = ['url', 'label', 'group_name', 'game', 'country', 'state', 'currency', 'price', 'stock', 'target', 'shipping', 'checked', 'error']
+                keys = ['url', 'label', 'group_name', 'game', 'country', 'state', 'pack_count', 'shipping_postcode', 'shipping_country', 'pickup', 'currency', 'price', 'stock', 'target', 'shipping', 'checked', 'error']
                 with open(path, 'w', newline='', encoding='utf-8-sig') as f:
                     writer = csv.writer(f)
                     writer.writerow([k + '_minor_units' if k in ('price', 'target', 'shipping') else k for k in keys])
@@ -444,8 +469,16 @@ class App(tk.Tk):
                 kind, payload = self.monitor.events.get_nowait()
                 if kind == 'alert':
                     self.bell()
+                    if self.native_enabled.get():self.desktop.notify(payload)
                     self.status.set('ALERT • ' + payload)
                     changed = True
+                elif kind == 'variant_options':
+                    dialog,requested,options,error=payload
+                    if dialog.winfo_exists():dialog.receive(requested,options,error)
+                elif kind == 'desktop_action':
+                    if payload=='show':self.deiconify();self.lift()
+                    elif payload=='check':self.monitor.check_now()
+                    elif payload=='exit':self.close();return
                 elif kind == 'news_updated':
                     changed = True
                 elif kind == 'discovered':
@@ -468,9 +501,31 @@ class App(tk.Tk):
         if changed or time.monotonic() - self.last_refresh > 60:
             self.refresh()
             self.last_refresh = time.monotonic()
+        self.native_status.set('Native tray ready; visibility depends on Windows settings.' if self.desktop.available() else self.desktop.error or 'Tray is not ready. The window remains accessible.')
         self.after(500, self.drain)
 
+    def save_native(self):
+        self.db.set_setting('native_notifications',self.native_enabled.get())
+        self.db.set_setting('close_to_tray',self.close_to_tray.get())
+
+    def test_notification(self):
+        if not self.desktop.available():self.desktop.start()
+        self.bell()
+        self.status.set('Test notification requested.' if self.desktop.notify('This is a TCG Alerts test.') else self.desktop.error or 'Tray is starting; try again shortly.')
+
+    def minimize_to_tray(self):
+        if self.desktop.available():self.withdraw();return True
+        self.status.set(self.desktop.error or 'Tray is not ready; the window remains visible.')
+        return False
+
+    def request_close(self):
+        if self.close_to_tray.get() and self.minimize_to_tray():return
+        self.close()
+
     def close(self):
+        if self._closing:return
+        self._closing=True
+        self.desktop.stop()
         self.monitor.close()
         self.news_monitor.close()
         self.destroy()
@@ -482,6 +537,11 @@ def main():
     parser.add_argument('--smoke-test', action='store_true', help='Open and close a temporary empty GUI without network checks')
     args = parser.parse_args()
     if args.smoke_test:
+        import sys
+        if sys.platform=='win32':
+            import pystray
+            from PIL import Image
+            pystray.Icon('TCGAlertsSmoke',Image.new('RGBA',(16,16)))
         import tempfile
         from pathlib import Path
         with tempfile.TemporaryDirectory() as directory:

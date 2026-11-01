@@ -6,6 +6,8 @@ import tempfile
 from tcg_alerts.core import Database, Observation
 from tcg_alerts.app import App, WatchDialog
 from tcg_alerts.panels import NewsSources
+from tcg_alerts.additions import Rules,VariantPicker,delivery_editor
+from unittest.mock import patch
 
 with tempfile.TemporaryDirectory() as directory:
     db = Database(Path(directory) / 'test.sqlite3')
@@ -53,5 +55,31 @@ with tempfile.TemporaryDirectory() as directory:
     sources=NewsSources(app)
     app.update()
     sources.destroy()
+    app.reset_filters()
+    db.update(first,pack_count=24,shipping=1000,shipping_postcode='3000')
+    app.compare_page.destination.set('3000');app.compare_page.refresh()
+    assert app.compare_table.item(str(first),'values')[-1]=='9.58'
+    app.directory_page.refresh()
+    assert len(app.directory_page.table.get_children())==6
+    app.directory_page.table.selection_set(str(db.stores()[0]['id']))
+    app.directory_page.discover()
+    assert app.tabs.select()==str(app.discovery_page)
+    app.directory_page.edit(True)
+    app.calendar_page.view.set('All entries');app.calendar_page.refresh()
+    assert len(app.calendar_page.table.get_children())==4
+    app.calendar_page.table.selection_set(str(db.releases()[0]['id']));app.calendar_page.edit(True)
+    rules=Rules(app,db.stores()[0]);rules.add()
+    delivery_editor(app,db.rows('SELECT * FROM watches WHERE id=?',(first,))[0])
+    chosen=[]
+    picker=VariantPicker(app,'https://fixture.example/products/box',chosen.append)
+    picker.receive(picker.url.get(),[dict(title='Box',currency='AUD',price=20000,stock='in_stock',id='42',url='https://fixture.example/products/box?variant=42')],None)
+    picker.table.selection_set('42');picker.select()
+    assert chosen[0]['url'].endswith('?variant=42')
+    with patch.object(app.desktop,'available',return_value=True):
+        app.close_to_tray.set(True);app.request_close()
+        assert app.winfo_exists() and app.state()=='withdrawn'
+        app.deiconify();app.close_to_tray.set(False)
+    with patch.object(app.desktop,'available',return_value=False):assert not app.minimize_to_tray()
+    app.update()
     app.close()
 print('GUI smoke passed')

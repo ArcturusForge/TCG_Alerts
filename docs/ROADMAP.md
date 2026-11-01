@@ -26,3 +26,9 @@ Check currency, exact selected variant, known sold-out/in-stock examples, preord
 ## Service scale
 
 Add Postgres, shared workers, queues and accounts only when multiple users or an always-on service justify them. Before broad unattended crawling, add database migrations, transactional external alert delivery, retention, observability, access controls and a retailer contact process. Monitoring on a PC still requires that PC to be awake and the app running.
+
+## v0.3 integrated
+
+Sourced starter store directory, exact Shopify variant picker, Windows tray notifications/controls, explicit release/prerelease calendar with `.ics` export, and destination-based shipping/per-pack estimates. Initial sources are dated snapshots; shipping quotes are user entered; native Linux tray and email/Telegram are not included. Existing watches/history migrate additively.
+
+Next proposal: [deck builder and live cost tracker](DECK_BUILDER.md), with exact printing identity, owned/missing quantities, provider-aware pricing and no assumed access to eBay sold history.

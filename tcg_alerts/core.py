@@ -5,6 +5,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 import os
 import sqlite3
+import json
 from contextlib import contextmanager, closing
 from datetime import datetime, timezone
 
@@ -53,6 +54,7 @@ class Database:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.connect() as c:
+            if c.execute('PRAGMA user_version').fetchone()[0]>3:raise ValueError('This database requires a newer app version.')
             c.executescript('''
                 PRAGMA journal_mode=WAL;
                 CREATE TABLE IF NOT EXISTS watches (
@@ -91,12 +93,13 @@ class Database:
                     id INTEGER PRIMARY KEY, source_id INTEGER NOT NULL REFERENCES news_sources(id) ON DELETE CASCADE,
                     url TEXT NOT NULL UNIQUE, title TEXT NOT NULL, published TEXT, first_seen TEXT NOT NULL,
                     topic TEXT NOT NULL DEFAULT 'News');
-                PRAGMA user_version=2;
             ''')
             for name, url, game, adapter in (
                 ('Riftbound official', 'https://playriftbound.com/en-us/news/', 'Riftbound', 'riftbound'),
                 ('Cyberpunk official', 'https://cyberpunktcg.com/blog', 'Cyberpunk', 'cyberpunk')):
                 c.execute('INSERT OR IGNORE INTO news_sources(name,url,game,adapter) VALUES(?,?,?,?)', (name,url,game,adapter))
+            from .storage_v3 import migrate
+            migrate(c)
 
     @contextmanager
     def connect(self):
@@ -116,26 +119,37 @@ class Database:
     def watches(self):
         return self.rows('SELECT * FROM watches ORDER BY id DESC')
 
-    def add(self, url, label='', group_name='', target=None, shipping=None, restock=True, game='Unspecified', country='Unspecified', state='Unspecified'):
+    def add(self, url, label='', group_name='', target=None, shipping=None, restock=True, game='Unspecified', country='Unspecified', state='Unspecified',pack_count=None,shipping_postcode='',shipping_country='Australia',pickup='Unspecified'):
         from .sources import validate_url
         url = validate_url(url)
         from .catalog import metadata
+        from .commerce import domain,validate_delivery
+        stores=self.rows('SELECT * FROM stores WHERE domain=?',(domain(url),))
+        store=stores[0] if stores else None
+        if store and country=='Unspecified' and state=='Unspecified':country,state=store['country'],store['state']
         game, country, state = metadata(game, country, state)
+        shipping_country=metadata(country=shipping_country)[1]
+        shipping_postcode=validate_delivery(dict(pack_count=pack_count,shipping_postcode=shipping_postcode,shipping_country=shipping_country,pickup=pickup))['shipping_postcode']
         if target is not None and (not isinstance(target, int) or target < 0):
             raise ValueError('Invalid target.')
         if shipping is not None and (not isinstance(shipping, int) or shipping < 0):
             raise ValueError('Invalid shipping.')
         with self.connect() as c:
-            return c.execute('INSERT INTO watches(url,label,group_name,target,shipping,restock,game,country,state) VALUES(?,?,?,?,?,?,?,?,?)',
-                             (url, label, group_name, target, shipping, int(restock), game, country, state)).lastrowid
+            return c.execute('INSERT INTO watches(url,label,group_name,target,shipping,restock,game,country,state,store_id,pack_count,shipping_postcode,shipping_country,pickup) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+                             (url, label, group_name, target, shipping, int(restock), game, country, state,store['id'] if store else None,pack_count,shipping_postcode,shipping_country,pickup)).lastrowid
 
     def update(self, watch_id, **fields):
-        allowed = {'label', 'group_name', 'target', 'shipping', 'restock', 'enabled', 'game', 'country', 'state'}
+        allowed = {'label', 'group_name', 'target', 'shipping', 'restock', 'enabled', 'game', 'country', 'state','pack_count','shipping_postcode','shipping_country','pickup'}
         if not fields or not set(fields) <= allowed:
             raise ValueError('Invalid fields.')
         for key in ('target', 'shipping'):
             if fields.get(key) is not None and (not isinstance(fields[key], int) or fields[key] < 0):
                 raise ValueError('Invalid money amount.')
+        from .commerce import validate_delivery
+        row=self.rows('SELECT * FROM watches WHERE id=?',(watch_id,))
+        if not row:raise ValueError('Watch no longer exists.')
+        delivery=validate_delivery({**row[0],**fields})
+        if 'shipping_postcode' in fields:fields['shipping_postcode']=delivery['shipping_postcode']
         if set(fields) & {'game', 'country', 'state'}:
             from .catalog import metadata
             old = self.rows('SELECT * FROM watches WHERE id=?', (watch_id,))
@@ -156,6 +170,7 @@ class Database:
         alerts = []
         at = now()
         with self.connect() as c:
+            c.execute('BEGIN IMMEDIATE')
             old = c.execute('SELECT * FROM watches WHERE id=?', (watch_id,)).fetchone()
             if not old or not old['enabled']:
                 return []
@@ -238,3 +253,64 @@ class Database:
         return self.rows('''SELECT n.*,s.name AS source_name,s.game,s.checked,s.error,s.enabled FROM news_items n
                             JOIN news_sources s ON s.id=n.source_id WHERE s.enabled=1
                             ORDER BY COALESCE(n.published,n.first_seen) DESC LIMIT 500''')
+
+
+    def setting(self,key,default=None):
+        rows=self.rows('SELECT value FROM settings WHERE key=?',(key,))
+        return json.loads(rows[0]['value']) if rows else default
+
+    def set_setting(self,key,value):
+        with self.connect() as c:c.execute('INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',(key,json.dumps(value)))
+
+    def stores(self):return self.rows('SELECT * FROM stores ORDER BY name')
+
+    def save_store(self,fields,store_id=None):
+        from .sources import validate_url
+        from .commerce import domain
+        from .releases import checked_day
+        keys=('name','url','country','state','address','source_url','checked','catalog_url','support','pickup')
+        v={k:str(fields.get(k) or '').strip() for k in keys}
+        if not v['name'] or not v['address']:raise ValueError('Name and location description are required.')
+        for key in ('url','source_url','catalog_url'):v[key]=validate_url(v[key])
+        from .catalog import metadata
+        _,v['country'],v['state']=metadata(country=v['country'],state=v['state'])
+        checked_day(v['checked']);v['domain']=domain(v['url'])
+        if v['pickup'] not in ('Unspecified','Yes','No'):raise ValueError('Invalid pickup option.')
+        with self.connect() as c:
+            if store_id:
+                old=c.execute('SELECT domain FROM stores WHERE id=?',(store_id,)).fetchone()
+                if not old or old['domain']!=v['domain']:raise ValueError('Add a new entry to use another store domain.')
+                c.execute('UPDATE stores SET '+','.join(k+'=?' for k in v)+' WHERE id=?',(*v.values(),store_id))
+            else:store_id=c.execute('INSERT INTO stores('+','.join(v)+') VALUES('+','.join('?' for k in v)+')',tuple(v.values())).lastrowid
+            for row in c.execute('SELECT id,url FROM watches WHERE store_id IS NULL').fetchall():
+                if domain(row['url'])==v['domain']:c.execute('UPDATE watches SET store_id=? WHERE id=?',(store_id,row['id']))
+        return store_id
+
+    def apply_store(self,store_id):
+        with self.connect() as c:
+            s=c.execute('SELECT * FROM stores WHERE id=?',(store_id,)).fetchone()
+            if s:c.execute('UPDATE watches SET country=?,state=? WHERE store_id=?',(s['country'],s['state'],store_id))
+
+    def rules(self,store_id):return self.rows('SELECT * FROM shipping_rules WHERE store_id=?',(store_id,))
+
+    def save_rule(self,store_id,v):
+        from .sources import validate_url
+        from .commerce import postcode
+        v=dict(v);v['postcode']=postcode(v['postcode'],v['country']);v['source_url']=validate_url(v['source_url'])
+        if len(v['currency'])!=3 or not v['currency'].isalpha() or not v['currency'].isupper():raise ValueError('Use a three-letter uppercase currency code.')
+        if v['flat'] is None and v['free_over'] is None:raise ValueError('Enter a flat rate or free threshold.')
+        for key in ('flat','free_over'):
+            if v[key] is not None and (not isinstance(v[key],int) or isinstance(v[key],bool) or v[key]<0):raise ValueError('Invalid money amount.')
+        with self.connect() as c:c.execute("INSERT INTO shipping_rules(store_id,country,postcode,currency,flat,free_over,source_url,checked) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(store_id,country,postcode,currency) DO UPDATE SET flat=excluded.flat,free_over=excluded.free_over,source_url=excluded.source_url,checked=excluded.checked",(store_id,v['country'],v['postcode'],v['currency'],v['flat'],v['free_over'],v['source_url'],now()[:10]))
+
+    def delete_rule(self,rule_id):
+        with self.connect() as c:c.execute('DELETE FROM shipping_rules WHERE id=?',(rule_id,))
+
+    def releases(self):return self.rows("SELECT * FROM releases ORDER BY COALESCE(start,'9999'),title")
+
+    def save_release(self,fields,release_id=None):
+        from .releases import validate
+        v=validate(fields)
+        with self.connect() as c:
+            if release_id:c.execute('UPDATE releases SET '+','.join(k+'=?' for k in v)+' WHERE id=?',(*v.values(),release_id));return release_id
+            return c.execute('INSERT INTO releases('+','.join(v)+') VALUES('+','.join('?' for k in v)+')',tuple(v.values())).lastrowid

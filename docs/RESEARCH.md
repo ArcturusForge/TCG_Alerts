@@ -41,3 +41,14 @@ Retailer support can break when templates, structured data, policies or endpoint
 - Merchant country/state are explicit user-entered tags. They do not claim delivery coverage or address verification. Existing watches are Unspecified rather than guessed from AUD pricing.
 - Price analytics are per exact listing and observed time window. Activity charts count recorded check outcomes and browser open requests locally. We have no access to retailer analytics, sessions, unique visitors or sales; no estimated traffic is supplied as though it were measured.
 - Upgrade validation covers additive v1→v2 migration, metadata filters, publication parsing, RSS/Atom safety, source caching, filtered analytics and empty chart states. Windows/Linux packaging includes both GUI and executable launch checks.
+
+
+## v0.3 implementation and research snapshot
+
+Location sources checked 1 November 2026: [Only Packs](https://onlypackstcg.com.au/pages/contact), [Plenty of Games FAQ](https://www.plentyofgames.com.au/pages/faq), [Final Boss](https://thefinalbosscollectables.com.au/pages/contact), [GUF](https://guf.com.au/pages/contact-us), [Tezza's](https://www.tezzasgames.com/), and [Techzone](https://techzonegeelong.com/). Plenty's FAQ discusses pickup; other starting pickup policies remain unknown. Each store has separate parser-support notes. No merchant trust badge or branch-level online inventory inference is made.
+
+Calendar sources: [Cyberpunk production diary](https://cyberpunktcg.com/blog/production-update-1), [official event calendar](https://cyberpunktcg.com/calendar), [Riftbound 2026 Drawings](https://playriftbound.com/en-us/news/announcements/riftbounds-2026-drawings/), and [Cyberpunk Set Two](https://cyberpunktcg.com/blog/set-2-announcement). Exact dates, ranges and seasonal wording retain their differing precision and unspecified regional scope. Calendar entries are dated snapshots, with editable evidence rather than an automatic re-verification claim.
+
+[Only Packs shipping policy](https://onlypackstcg.com.au/policies/shipping-policy) describes checkout-calculated shipping and promotions. We did not seed an unconditional rate from a product banner. User-entered country/postcode/currency estimates carry evidence and entered dates.
+
+Native notifications follow [pystray's API](https://pystray.readthedocs.io/en/latest/usage.html). Callbacks queue commands to the Tk thread. Windows is supported; other platforms preserve a visible app. Lifecycle tests use a fake icon, while packaged Windows launch tests import the native backend. Neither claims to prove notification visibility under an individual user's OS settings.

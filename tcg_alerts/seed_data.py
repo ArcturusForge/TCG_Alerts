@@ -1,0 +1,13 @@
+"""Curated research snapshot, 1 November 2026. Not automatically re-verified."""
+STORES=[
+('Only Packs','https://onlypackstcg.com.au','Suite 103, 343 Little Collins St, Melbourne VIC 3000','https://onlypackstcg.com.au/pages/contact','https://onlypackstcg.com.au/collections/riftbound','Shopify product adapter live-probed; exact variant required','Unspecified'),
+('Plenty of Games','https://www.plentyofgames.com.au','Level 1, 278 Collins St, Melbourne VIC 3000','https://www.plentyofgames.com.au/pages/faq','https://www.plentyofgames.com.au/collections/all','Catalog candidate; individual product support untested','Yes'),
+('The Final Boss Collectables','https://thefinalbosscollectables.com.au','Unit 4/43 Orbis Drive, Ravenhall VIC 3023','https://thefinalbosscollectables.com.au/pages/contact','https://thefinalbosscollectables.com.au/collections/all','Shopify storefront; product support untested','Unspecified'),
+('GUF','https://guf.com.au','Branches: Ballarat, Bendigo, Geelong, Werribee. Online stock is not branch stock.','https://guf.com.au/pages/contact-us','https://guf.com.au/collections/all','BinderPOS storefront; product support untested','Unspecified'),
+("Tezza's Games",'https://www.tezzasgames.com','60 Palmerston St, Melton VIC 3337','https://www.tezzasgames.com/','https://www.tezzasgames.com/','Information/events site; browse manually; no validated product adapter','Unspecified'),
+('Techzone Geelong','https://techzonegeelong.com','Geelong; see source for current address','https://techzonegeelong.com/','https://techzonegeelong.com/collections/all','Catalog candidate; product support untested','Unspecified')]
+RELEASES=[
+('cyberpunk-retail','Welcome to Night City — retail release','Cyberpunk','Release','2026-11-06','2026-11-06','Day','','https://cyberpunktcg.com/blog/production-update-1','Publisher date; Australian stock arrival must be checked with the store.'),
+('cyberpunk-prerelease','Welcome to Night City — prerelease weekend','Cyberpunk','Prerelease','2026-10-30','2026-11-01','Range','','https://cyberpunktcg.com/calendar','Participating stores set local event times; see the event finder.'),
+('riftbound-gift','Gift of the Rift Bundle','Riftbound','Release','2026-12-04','2026-12-04','Day','','https://playriftbound.com/en-us/news/announcements/riftbounds-2026-drawings/','Publisher availability date; local stock and pricing may differ.'),
+('cyberpunk-set2','Edgerunners: Burn Bright — Set Two','Cyberpunk','Release',None,None,'Window','Spring 2027 (publisher wording; hemisphere unspecified)','https://cyberpunktcg.com/blog/set-2-announcement','Confirmed announcement; exact date and Australian timing are unconfirmed.')]

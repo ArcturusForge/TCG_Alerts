@@ -8,7 +8,7 @@ from html.parser import HTMLParser
 from urllib import request, parse, robotparser, error
 from .core import Observation, money
 
-AGENT = 'TCGAlerts/0.2 (+personal desktop price monitor)'
+AGENT = 'TCGAlerts/0.3 (+personal desktop price monitor)'
 LIMIT = 4 * 1024 * 1024
 
 
@@ -178,10 +178,9 @@ def fetch(url, client):
     match = re.search(r'^(.*?/)?products/([^/]+?)(?:\.js)?/?$', p.path.lstrip('/'))
     if match:
         # Product paths are characteristic but not proof of Shopify. A 404 can fall back to JSON-LD.
-        path = p.path.rstrip('/').removesuffix('.js')
-        origin = f'{p.scheme}://{p.netloc}'
+        base,cart_url=product_endpoints(url)
         try:
-            product = json.loads(client.get(origin + path + '.js'))
+            product = json.loads(client.get(base+'.js'))
         except error.HTTPError as e:
             if e.code != 404:
                 raise
@@ -189,8 +188,7 @@ def fetch(url, client):
             pass
         else:
             if isinstance(product, dict) and 'variants' in product:
-                locale = path.split('/products/', 1)[0]
-                cart = json.loads(client.get(origin + locale + '/cart.js'))
+                cart=json.loads(client.get(cart_url))
                 currency = cart.get('currency', '')
                 variant_id = parse.parse_qs(p.query).get('variant', [None])[0]
                 return shopify(product, currency, variant_id)
@@ -235,3 +233,25 @@ def discover(url, client):
     parser = ProductLinks(url)
     parser.feed(client.get(url))
     return [(u, ' '.join(title.split()) or parse.unquote(u.rsplit('/', 1)[-1])) for u, title in list(parser.links.items())[:100]]
+
+
+def product_endpoints(url):
+    p=parse.urlsplit(validate_url(url));parts=p.path.strip('/').split('/');pos=len(parts)-2
+    if pos<0 or parts[pos]!='products':raise ValueError('Paste an exact Shopify product URL.')
+    before=parts[:pos]
+    if 'collections' in before:before=before[:before.index('collections')]
+    locale='/'+('/'.join(before)) if before else ''
+    base='https://'+p.netloc+locale
+    return base+'/products/'+parts[-1].removesuffix('.js'),base+'/cart.js'
+
+
+def variant_options(url,client):
+    base,cart=product_endpoints(url)
+    product=json.loads(client.get(base+'.js'));currency=json.loads(client.get(cart)).get('currency','')
+    options=[]
+    for v in product.get('variants',[]):
+        o=shopify(product,currency,str(v['id']))
+        query=[(k,value) for k,value in parse.parse_qsl(parse.urlsplit(url).query) if k!='variant']+[('variant',str(v['id']))]
+        options.append(dict(title=o.title,price=o.price,currency=o.currency,stock=o.stock,id=str(v['id']),url=base+'?'+parse.urlencode(query)))
+    if not options:raise ValueError('No recognizable Shopify variants. Use the store’s exact product URL directly.')
+    return options
