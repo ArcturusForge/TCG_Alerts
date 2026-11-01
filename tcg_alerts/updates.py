@@ -129,7 +129,7 @@ class UpdateCoordinator:
         self.status='Automatic checks run every six hours while the app is open.'
         try:
             from . import __version__
-            saved=json.loads((self.root/'pending.json').read_text())
+            saved=json.loads((self.root/'pending.json').read_text(encoding='utf-8'))
             if version(saved['version'])>version(__version__) and Path(saved['executable']).is_file():self.pending=saved
         except (OSError,ValueError,KeyError,TypeError):pass
     def start(self):
@@ -182,13 +182,13 @@ class UpdateCoordinator:
                 rejected=self.app.db.setting('failed_plugin_updates',{}).get(record['id'])
                 if rejected and version(rejected)==version(release['tag_name']):
                     messages.append(record['name']+': this version previously failed and was rolled back.');continue
-                installed=json.loads(Path(record['path']).read_text())
+                installed=json.loads(Path(record['path']).read_text(encoding='utf-8'))
                 if version(release['tag_name'])<=version(installed.get('version','0.0.0')):continue
                 from .plugins import validate_manifest
                 def validate(folder):
                     manifests=list(folder.rglob('plugin.json'))
                     if len(manifests)!=1:raise ValueError('Plugin package needs one manifest.')
-                    m=validate_manifest(json.loads(manifests[0].read_text()))
+                    m=validate_manifest(json.loads(manifests[0].read_text(encoding='utf-8')))
                     if m['id']!=record['id'] or version(m.get('version',''))!=version(release['tag_name']):raise ValueError('Plugin id/version differs from installed provider/release.')
                     if m.get('update')!=setting:raise ValueError('Plugin cannot silently change its update source.')
                     # Keep capability/host/game changes explicit rather than granting new permissions during an update.

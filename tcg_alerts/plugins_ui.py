@@ -42,11 +42,11 @@ class PluginManager(tk.Toplevel):
                 def validate(folder):
                     paths=list(folder.rglob('plugin.json'))
                     if len(paths)!=1:raise ValueError('Plugin ZIP must contain exactly one manifest.')
-                    manifest=validate_manifest(json.loads(paths[0].read_text()))
+                    manifest=validate_manifest(json.loads(paths[0].read_text(encoding='utf-8')))
                     if manifest.get('update')!=dict(repository=repository,asset=asset_name):raise ValueError('Manifest update source must match the selected repository and asset.')
                 safe_name=__import__('hashlib').sha256((repository+asset_name).encode()).hexdigest()[:20]
                 folder=install_version(client,repository,release,select_asset(release,asset_name),self.app.updates.root/('install-'+safe_name),validate)
-                manifest_path=next(folder.rglob('plugin.json'));manifest=validate_manifest(json.loads(manifest_path.read_text()))
+                manifest_path=next(folder.rglob('plugin.json'));manifest=validate_manifest(json.loads(manifest_path.read_text(encoding='utf-8')))
                 target=self.app.plugins.directory/manifest['id']
                 if target.exists():raise ValueError('Provider is already installed; use its automatic updater instead.')
                 stage=target.with_name(target.name+'.updating')

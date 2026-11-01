@@ -47,14 +47,14 @@ class UpdateTests(unittest.TestCase):
         from tcg_alerts.plugins import PluginRegistry
         db=Database(self.root/'data.db');registry=PluginRegistry(self.root/'plugins',db)
         folder=registry.directory/'example';folder.mkdir()
-        m=dict(api_version=1,id='example',name='Example',version='1.0.0',kind='catalogue-json',games=['Game'],api_url='https://cards.example/',fields={'id':'id','name':'name'},update=dict(repository='owner/repo',asset='plugin.zip'))
-        (folder/'plugin.json').write_text(json.dumps(m));(folder/'data').mkdir();(folder/'data/user.txt').write_text('keep');registry.reload()
+        m=dict(api_version=1,id='example',name='Example',version='1.0.0',kind='catalogue-json',games=['Pokémon'],api_url='https://cards.example/',fields={'id':'id','name':'name'},update=dict(repository='owner/repo',asset='plugin.zip'))
+        (folder/'plugin.json').write_text(json.dumps(m,ensure_ascii=False),encoding='utf-8');(folder/'data').mkdir();(folder/'data/user.txt').write_text('keep');registry.reload()
         app=Mock(db=db,plugins=registry);coordinator=UpdateCoordinator(app)
-        new=dict(m,version='1.1.0');archive=self.archive([('plugin.json',json.dumps(new))])
+        new=dict(m,version='1.1.0');archive=self.archive([('plugin.json',json.dumps(new,ensure_ascii=False))])
         client=Mock();client.latest.return_value=dict(tag_name='v1.1.0',assets=[dict(name='plugin.zip',digest='sha256:fixture')]);client.download.return_value=archive
         with patch('tcg_alerts.updates.Releases',return_value=client):
             coordinator.update_plugins()
-        self.assertEqual(json.loads((folder/'plugin.json').read_text())['version'],'1.1.0');self.assertEqual((folder/'data/user.txt').read_text(),'keep')
+        self.assertEqual(json.loads((folder/'plugin.json').read_text(encoding='utf-8'))['version'],'1.1.0');self.assertEqual((folder/'data/user.txt').read_text(),'keep')
         registry.reload();self.assertEqual(len(registry.entries),1);self.assertTrue(folder.with_name('example.previous').exists())
         # Repeated checks use the installed version, not a stale loaded manifest.
         app.plugins=registry

@@ -2,7 +2,7 @@
   "api_version": 1,
   "id": "tcgdex-pokemon",
   "name": "TCGdex \u00b7 Pok\u00e9mon (English)",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "kind": "catalogue-json",
   "games": [
     "Pok\u00e9mon"
