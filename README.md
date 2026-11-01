@@ -19,7 +19,7 @@ To build locally on Windows:
 
 ```powershell
 python -m pip install . pyinstaller==6.16.0
-python -m PyInstaller --noconfirm --clean --onefile --windowed --name TCGAlerts run.py
+python -m PyInstaller --noconfirm --clean --onefile --windowed --hidden-import PIL._tkinter_finder --hidden-import PIL._imagingtk --name TCGAlerts run.py
 ```
 
 The result is `dist/TCGAlerts.exe`. Build on the target operating system; a Linux build is not a Windows executable.
