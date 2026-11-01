@@ -89,17 +89,12 @@ class DeckPage(ttk.Frame):
         ttk.Label(header,text='Deck builder & cost tracker',style='Heading.TLabel').pack(side='left')
         self.choice=tk.StringVar();self.picker=ttk.Combobox(header,textvariable=self.choice,state='readonly',width=44);self.picker.pack(side='right');self.picker.bind('<<ComboboxSelected>>',lambda e:self.refresh())
         controls=ttk.Frame(self);controls.pack(fill='x',pady=(0,8))
-        actions=[('New deck',lambda:self.edit_deck(False)),('Edit deck',lambda:self.edit_deck(True)),('Copy deck',self.copy),('Delete deck',self.delete),('Import text',self.import_text),('Import CSV',self.import_csv),('Add card',self.add),('Edit card',self.edit),('Remove row',self.remove),('Export CSV',self.export),('Save price snapshot',self.snapshot),('Snapshot history',self.history)]
-        for i,(title,action) in enumerate(actions):ttk.Button(controls,text=title,command=action).grid(row=i//6,column=i%6,sticky='w',padx=(0,6),pady=3)
-        def arrange(event):
-            buttons=controls.winfo_children();x=0;row=0;column=0
-            for button in buttons:
-                needed=button.winfo_reqwidth()+6
-                if column and (x+needed>event.width or column==6):
-                    row+=1;column=0;x=0
-                button.grid_configure(row=row,column=column)
-                x+=needed;column+=1
-        controls.bind('<Configure>',arrange)
+        primary=[('New deck',lambda:self.edit_deck(False)),('Import list',self.import_text),('Add card',self.add),('Edit selected',self.edit)]
+        for title,action in primary:ttk.Button(controls,text=title,command=action).pack(side='left',padx=(0,6))
+        more=ttk.Menubutton(controls,text='More deck actions ▾');more.pack(side='left')
+        menu=tk.Menu(more,tearoff=False,bg='#151f32',fg='#e9effa',activebackground='#2d4961',activeforeground='#e9effa')
+        for title,action in [('Edit deck',lambda:self.edit_deck(True)),('Copy deck',self.copy),('Delete deck',self.delete),('Import CSV',self.import_csv),('Remove selected card',self.remove),('Export CSV',self.export),('Save price snapshot',self.snapshot),('Snapshot history',self.history)]:menu.add_command(label=title,command=action)
+        more.configure(menu=menu)
         self.summary=tk.StringVar(value='Create a deck or import a list to start.');ttk.Label(self,textvariable=self.summary,style='Muted.TLabel',wraplength=1250).pack(anchor='w',pady=6)
         view_tools=ttk.Frame(self);view_tools.pack(fill='x',pady=(0,8))
         self.view=tk.StringVar(value=app.db.setting('deck_view','Artwork gallery'))

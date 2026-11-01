@@ -156,7 +156,7 @@ Use **Save price snapshot** to record the current subtotals, copy coverage and t
 
 The illustrated banner, paper-strip accents and selected navigation row take inspiration from game menus. A persistent left menu groups collection tools, exploration and preferences. The current page has its own title and short explanation; watchlist search, counts and price-check controls stay with the watchlist. Game and store-region filters remain visible across pages (each page retains its documented filter scope).
 
-Empty watchlists explain the first step; filtered empty results suggest clearing filters. Actions needing a selected watch are disabled until a row is selected. Tables support horizontal scrolling; deck actions wrap to the available width. Initial window size fits the display, with a supported minimum of 1180 × 700. Use Tab and Space to navigate controls, Ctrl+1 for the watchlist, and Ctrl+F for watchlist search. Native fonts depend on the operating system.
+Empty watchlists explain the first step; filtered empty results suggest clearing filters. Actions needing a selected watch are disabled until a row is selected. Tables support horizontal scrolling; secondary deck actions live in a compact menu and the banner shortens in smaller windows. Initial window size fits the display, with a supported minimum of 1180 × 700. Use Tab and Space to navigate controls, Ctrl+1 for the watchlist, and Ctrl+F for watchlist search. Native fonts depend on the operating system.
 
 
 ## v0.5 — visuals, catalogue providers and first-use help
