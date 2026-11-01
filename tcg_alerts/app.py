@@ -13,6 +13,9 @@ from datetime import datetime, timezone
 from urllib.parse import urlsplit
 from .core import Database, data_dir, money
 from .monitor import Monitor
+from .catalog import GAMES, COUNTRIES, AU_STATES, matches
+from .news import NewsMonitor
+from .panels import NewsPage, AnalyticsPage
 
 BG = '#0d1321'
 PANEL = '#151f32'
@@ -48,10 +51,19 @@ class WatchDialog(tk.Toplevel):
             entry.grid(row=i * 2, columnspan=2, sticky='ew')
             if key == 'url' and existing:
                 entry.configure(state='readonly')
+        tags = ttk.Frame(frame)
+        tags.grid(row=11, columnspan=2, sticky='ew', pady=(12, 0))
+        for key, label, values in (('game', 'Game', GAMES), ('country', 'Store country', COUNTRIES), ('state', 'Store state / region', ('Unspecified', *AU_STATES))):
+            cell = ttk.Frame(tags)
+            cell.pack(side='left', padx=(0, 8))
+            ttk.Label(cell, text=label).pack(anchor='w')
+            v = tk.StringVar(value=(existing or {}).get(key, 'Unspecified'))
+            self.vars[key] = v
+            ttk.Combobox(cell, textvariable=v, values=values, width=20).pack()
         self.restock = tk.BooleanVar(value=bool((existing or {}).get('restock', True)))
-        ttk.Checkbutton(frame, text='Notify on confirmed sold out → in stock', variable=self.restock).grid(row=11, columnspan=2, sticky='w', pady=15)
-        ttk.Label(frame, text='Group only identical set, language, edition and pack quantity.\nTargets use item + shipping when shipping is known.\nFor Shopify options, copy the URL after choosing a variant.', style='Muted.TLabel').grid(row=12, columnspan=2, sticky='w')
-        ttk.Button(frame, text='Save watch', command=self.save, style='Accent.TButton').grid(row=13, column=1, sticky='e', pady=(18, 0))
+        ttk.Checkbutton(frame, text='Notify on confirmed sold out → in stock', variable=self.restock).grid(row=12, columnspan=2, sticky='w', pady=15)
+        ttk.Label(frame, text='Group only identical set, language, edition and pack quantity.\nTargets use item + shipping when shipping is known.\nStore tags describe location, not delivery eligibility.\nFor Shopify options, copy the URL after choosing a variant.', style='Muted.TLabel').grid(row=13, columnspan=2, sticky='w')
+        ttk.Button(frame, text='Save watch', command=self.save, style='Accent.TButton').grid(row=14, column=1, sticky='e', pady=(18, 0))
 
     def save(self):
         try:
@@ -76,15 +88,19 @@ class App(tk.Tk):
         super().__init__()
         self.db = db
         self.monitor = Monitor(db)
+        self.news_monitor = NewsMonitor(db, self.monitor.events)
         self.title('TCG Alerts • sealed product radar')
-        self.geometry('1280x800')
-        self.minsize(1000, 650)
+        self.geometry('1360x900')
+        self.minsize(1100, 760)
         self.configure(bg=BG)
         self.style_ui()
         self.rows = {}
         self.last_refresh = time.monotonic()
         self.search = tk.StringVar()
         self.filter = tk.StringVar(value='All watches')
+        self.game_filter = tk.StringVar(value='All games')
+        self.country_filter = tk.StringVar(value='All countries')
+        self.state_filter = tk.StringVar(value='All states')
         self.status = tk.StringVar(value='Ready • add your first product URL')
         self.search.trace_add('write', lambda *_: self.refresh())
         self.build()
@@ -92,6 +108,7 @@ class App(tk.Tk):
         self.protocol('WM_DELETE_WINDOW', self.close)
         if start_monitor:
             self.monitor.start()
+            self.news_monitor.start()
         self.after(250, self.drain)
 
     def style_ui(self):
@@ -127,7 +144,7 @@ class App(tk.Tk):
         header = ttk.Frame(outer)
         header.pack(fill='x')
         ttk.Label(header, text='TCG / ALERTS', style='Heading.TLabel').pack(side='left')
-        ttk.Label(header, text='LOCAL DESKTOP  •  v0.1', style='Muted.TLabel').pack(side='right')
+        ttk.Label(header, text='LOCAL DESKTOP  •  v0.2', style='Muted.TLabel').pack(side='right')
         ttk.Label(outer, text='Your sealed product radar.', style='Title.TLabel').pack(anchor='w', pady=(24, 6))
         ttk.Label(outer, text='Track the exact product. See the evidence. Catch your price.', style='Muted.TLabel').pack(anchor='w')
         metrics = ttk.Frame(outer)
@@ -148,6 +165,19 @@ class App(tk.Tk):
         picker.bind('<<ComboboxSelected>>', lambda e: self.refresh())
         ttk.Button(tools, text='+ Track product', style='Accent.TButton', command=self.add).pack(side='right')
         ttk.Button(tools, text='Check due now', command=self.monitor.check_now).pack(side='right', padx=10)
+        regions = ttk.Frame(outer)
+        regions.pack(fill='x', pady=(0, 12))
+        self.tag_boxes = {}
+        for label, key, var, values in (
+            ('Game', 'game', self.game_filter, ['All games', *GAMES]),
+            ('Store country', 'country', self.country_filter, ['All countries', *COUNTRIES]),
+            ('Store state / region', 'state', self.state_filter, ['All states', *AU_STATES, 'Unspecified'])):
+            ttk.Label(regions, text=label, style='Muted.TLabel').pack(side='left', padx=(0, 6))
+            box = ttk.Combobox(regions, textvariable=var, values=values, state='readonly', width=21)
+            box.pack(side='left', padx=(0, 14))
+            box.bind('<<ComboboxSelected>>', lambda e, k=key: self.tags_changed(k))
+            self.tag_boxes[key] = box
+        ttk.Button(regions, text='Reset filters', command=self.reset_filters).pack(side='right')
         self.tabs = ttk.Notebook(outer)
         self.tabs.pack(fill='both', expand=True)
         watch_page = ttk.Frame(self.tabs)
@@ -170,6 +200,10 @@ class App(tk.Tk):
         ttk.Label(compare, text='Compare identical products', style='Heading.TLabel').pack(anchor='w')
         ttk.Label(compare, text='Set the same comparison group on exact matches. Currencies stay separate.\nUnknown shipping is never assumed free. Paused, failed or stale listings are excluded.', style='Muted.TLabel').pack(anchor='w', pady=12)
         self.compare_table = self.make_table(compare, [('group', 'Group / currency', 220), ('store', 'Store', 180), ('item', 'Item', 100), ('shipping', 'Shipping', 110), ('total', 'Delivered', 110)])
+        self.analytics_page = AnalyticsPage(self, self.tabs)
+        self.tabs.add(self.analytics_page, text='Analytics')
+        self.news_page = NewsPage(self, self.tabs)
+        self.tabs.add(self.news_page, text='News')
         discovery = ttk.Frame(self.tabs, padding=18)
         self.tabs.add(discovery, text='Discover')
         ttk.Label(discovery, text='Find products on a store page', style='Heading.TLabel').pack(anchor='w')
@@ -209,6 +243,30 @@ class App(tk.Tk):
             dialog = WatchDialog(self, self.db, self.changed)
             dialog.vars['url'].set(values[1])
             dialog.vars['label'].set(values[0])
+            self.prefill_tags(dialog)
+
+    def scope(self):
+        return [w for w in self.db.watches() if matches(w, self.game_filter.get(), self.country_filter.get(), self.state_filter.get())]
+
+    def tags_changed(self, key):
+        if key == 'state' and self.state_filter.get() in AU_STATES:
+            self.country_filter.set('Australia')
+        elif key == 'country':
+            self.state_filter.set('All states')
+        self.refresh()
+
+    def reset_filters(self):
+        self.game_filter.set('All games')
+        self.country_filter.set('All countries')
+        self.state_filter.set('All states')
+        self.filter.set('All watches')
+        self.search.set('')
+        self.refresh()
+
+    def prefill_tags(self, dialog):
+        for key, var, all_value in (('game', self.game_filter, 'All games'), ('country', self.country_filter, 'All countries'), ('state', self.state_filter, 'All states')):
+            if var.get() != all_value:
+                dialog.vars[key].set(var.get())
 
     def make_table(self, parent, columns):
         wrap = ttk.Frame(parent)
@@ -243,7 +301,10 @@ class App(tk.Tk):
 
     def refresh(self):
         selected = self.table.selection() if hasattr(self, 'table') else ()
-        watches = self.db.watches()
+        all_watches = self.db.watches()
+        for key, all_value, defaults in (('game', 'All games', GAMES), ('country', 'All countries', COUNTRIES), ('state', 'All states', AU_STATES)):
+            self.tag_boxes[key].configure(values=[all_value, *dict.fromkeys([*defaults, *(w[key] for w in all_watches)])])
+        watches = self.scope()
         self.rows = {str(w['id']): w for w in watches}
         counts = [sum(bool(w['enabled']) for w in watches), sum(self.healthy(w) and w['stock'] == 'in_stock' for w in watches), sum(self.at_target(w) for w in watches), sum(w['enabled'] and (bool(w['error']) or self.stale(w)) for w in watches)]
         for label, count in zip(self.metrics, counts):
@@ -263,16 +324,20 @@ class App(tk.Tk):
             if mode == 'Paused' and w['enabled']:
                 continue
             title = w['label'] or w['title'] or 'Awaiting first check'
+            title += ' [' + w['game'] + ']'
             if w['group_name']:
                 title += ' · ' + w['group_name']
             state = (w['stock'] or 'unknown').replace('_', ' ')
             health = 'Paused' if not w['enabled'] else 'Check failed' if w['error'] else 'Stale' if self.stale(w) else 'OK'
-            self.table.insert('', 'end', iid=str(w['id']), values=(title, urlsplit(w['url']).netloc, self.cash(w['price'], w['currency'] or ''), state, self.cash(w['target']), self.local(w['checked']) + ' / ' + health))
+            store_label = urlsplit(w['url']).netloc + ' · ' + w['country'] + ' / ' + w['state']
+            self.table.insert('', 'end', iid=str(w['id']), values=(title, store_label, self.cash(w['price'], w['currency'] or ''), state, self.cash(w['target']), self.local(w['checked']) + ' / ' + health))
         for item in selected:
             if self.table.exists(item):
                 self.table.selection_set(item)
         self.alert_table.delete(*self.alert_table.get_children())
         for a in self.db.alerts():
+            if str(a['watch_id']) not in self.rows:
+                continue
             self.alert_table.insert('', 'end', values=(self.local(a['at']), a['kind'], a['message']))
         self.compare_table.delete(*self.compare_table.get_children())
         eligible = [w for w in watches if w['group_name'] and self.healthy(w) and w['stock'] == 'in_stock']
@@ -281,6 +346,8 @@ class App(tk.Tk):
             total = w['price'] + w['shipping'] if w['shipping'] is not None else None
             self.compare_table.insert('', 'end', values=(w['group_name'] + ' / ' + w['currency'], urlsplit(w['url']).netloc, self.cash(w['price']), self.cash(w['shipping']) if w['shipping'] is not None else 'Unknown', self.cash(total)))
         self.selection()
+        self.analytics_page.refresh()
+        self.news_page.refresh()
 
     def selected(self):
         selection = self.table.selection()
@@ -289,14 +356,15 @@ class App(tk.Tk):
     def selection(self):
         w = self.selected()
         if w:
-            self.detail.set(w['url'] + '\n' + (w['error'] or f"Source: {w['source'] or 'pending'} • Shipping: {self.cash(w['shipping']) if w['shipping'] is not None else 'unknown'} • Last attempt: {self.local(w['attempted'])}"))
+            self.detail.set(w['game'] + ' • Store: ' + w['country'] + ' / ' + w['state'] + ' • ' + w['url'] + '\n' + (w['error'] or f"Source: {w['source'] or 'pending'} • Shipping: {self.cash(w['shipping']) if w['shipping'] is not None else 'unknown'} • Last attempt: {self.local(w['attempted'])}"))
 
     def changed(self):
         self.refresh()
         self.monitor.check_now()
 
     def add(self):
-        WatchDialog(self, self.db, self.changed)
+        dialog = WatchDialog(self, self.db, self.changed)
+        self.prefill_tags(dialog)
 
     def edit(self):
         if w := self.selected():
@@ -314,7 +382,9 @@ class App(tk.Tk):
 
     def open_store(self):
         if w := self.selected():
-            webbrowser.open(w['url'])
+            if webbrowser.open(w['url']):
+                self.db.log_open(w['id'])
+                self.analytics_page.refresh()
 
     def show_history(self):
         if not (w := self.selected()):
@@ -347,7 +417,7 @@ class App(tk.Tk):
         if path:
             try:
                 rows = self.db.watches()
-                keys = ['url', 'label', 'group_name', 'currency', 'price', 'stock', 'target', 'shipping', 'checked', 'error']
+                keys = ['url', 'label', 'group_name', 'game', 'country', 'state', 'currency', 'price', 'stock', 'target', 'shipping', 'checked', 'error']
                 with open(path, 'w', newline='', encoding='utf-8-sig') as f:
                     writer = csv.writer(f)
                     writer.writerow([k + '_minor_units' if k in ('price', 'target', 'shipping') else k for k in keys])
@@ -376,6 +446,8 @@ class App(tk.Tk):
                     self.bell()
                     self.status.set('ALERT • ' + payload)
                     changed = True
+                elif kind == 'news_updated':
+                    changed = True
                 elif kind == 'discovered':
                     self.discovery_table.delete(*self.discovery_table.get_children())
                     for url, title in payload:
@@ -400,6 +472,7 @@ class App(tk.Tk):
 
     def close(self):
         self.monitor.close()
+        self.news_monitor.close()
         self.destroy()
 
 

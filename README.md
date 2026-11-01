@@ -2,7 +2,7 @@
 
 A private desktop radar for sealed TCG prices and restocks. Built for a Windows PC first, with Linux source support. No hosted server, subscription, API keys or Python packages are required to run from source (Python with Tk is required).
 
-**Status: working v0.1 MVP, not yet a full-store aggregation service.** It monitors exact product URLs that you choose. It does not claim coverage of 150 stores, verified merchants, physical inventory or guaranteed restock detection.
+**Status: working v0.2 MVP, not yet a full-store aggregation service.** It monitors exact product URLs that you choose. It does not claim coverage of 150 stores, verified merchants, physical inventory or guaranteed restock detection.
 
 ## Start
 
@@ -62,6 +62,30 @@ xvfb-run -a python tests/gui_smoke.py
 python tests/gui_smoke.py
 ```
 
-Network tests are mocked; unit tests never contact stores. A live Only Packs product check and collection discovery were performed during development. See [research and engineering decisions](docs/RESEARCH.md) and [roadmap](docs/ROADMAP.md).
+Network tests are mocked; unit tests never contact stores. Live Only Packs product/collection checks and official Riftbound/Cyberpunk publisher-page checks were performed during development. See [research and engineering decisions](docs/RESEARCH.md) and [roadmap](docs/ROADMAP.md).
 
 Core modules: `core.py` (SQLite and transitions), `sources.py` (transport, adapters and discovery), `monitor.py` (serial background worker), `app.py` (Tk desktop interface). The tracking core does not depend on the GUI and can later power an always-on service.
+
+## v0.2 — region, games, news and analytics
+
+Use the **Game**, **Store country**, and **Store state / region** selectors above the tabs. For example: `Riftbound → Australia → Victoria`. Selecting an Australian state sets the country to Australia. Reset clears every watchlist filter. You can tag Riftbound, Cyberpunk and other games or enter custom game/country/region names in the watch editor.
+
+These are **store location tags you supply**, not shipping eligibility or a verified address directory. An Australian currency, domain or product language does not establish where a store is based. Existing v0.1 watches migrate as Unspecified; edit their tags to include them in location/game filters. The upgrade preserves watches, observations and alerts. Country/state/game filters apply to counters, watchlists, comparisons, alert history and analytics. Search/status filters apply to the watchlist. Monitoring continues for all enabled watches even when hidden by a view filter. CSV export remains a full watchlist export and includes the new tags.
+
+### News board
+
+The **News** tab reads headline links and publication dates from the official Riftbound and Cyberpunk news pages. It refreshes due sources hourly while the app is open and caches headlines for offline use. Failed sources retain their cached items and show an error in **Manage sources**. A refresh button respects cooldowns. This reads the visible publisher index page, not their entire archive.
+
+Filter by game above and by topic inside the board. Topic tags come from headline keywords and can be imperfect. **Publication dates are not release dates.** No article publication date is promoted to a product release date, and seasonal windows such as “Spring” are not translated into Australian dates. Open the source story for release details and territory. These publisher indexes have global/unspecified regional scope; store-country filters deliberately do not hide them.
+
+Use **Manage sources / add RSS** to add RSS or Atom feeds for other games, new TCG announcements or a general news publisher. Supply a name, HTTPS feed URL and source-level game tag. Custom feeds are user sources; they are not verified official publishers. You can pause/resume any source. Only headline, link, publication date and keyword topic are stored; article text is not republished. There is no promise of coverage of every new TCG or all announcements.
+
+### Analytics
+
+The **Analytics** tab offers 7/30/90-day windows and three charts with hover values and an **Inspect plotted data** table:
+
+- **Item price:** actual observation timestamps for one selected exact listing, in its own currency. Includes sold-out and preorder price observations; excludes shipping. Low, last observed price and first-to-last change describe this observed sample, not market returns. Gaps between observations do not prove what happened while the app was asleep.
+- **Checks per UTC day:** successful versus failed listing checks for current tagged watches in the selected country/state/game scope. The success rate is successful attempts divided by all recorded successful/failed attempts. It is not availability or uptime. First/last UTC days can be partial.
+- **Store-link opens per UTC day:** browser open requests made through this installation's Open store action, where the browser accepted the request. It does not establish that a retailer page loaded, or represent retailer visitors, unique people, product demand, sales or general market traffic.
+
+Activity recording begins with v0.2; existing observations are not converted into invented historical activity. Current tags determine historical activity scope; deleted-watch activity is excluded. Each evidence series uses at most the latest 10,000 rows in the window, with a cap warning. Retailer visitor traffic requires an independently supplied or licensed source and is currently unavailable. No analytics is transmitted to us.

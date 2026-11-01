@@ -33,3 +33,11 @@
 ## Boundaries
 
 Retailer support can break when templates, structured data, policies or endpoints change. Shopify availability does not establish physical stock; unlabelled preorder/overselling configurations need manual verification. No two-decimal currency conversion, merchant verification, investment valuation or guaranteed alert timing is claimed. A future 24/7 mode needs an always-on host or an awake PC and a deliberate background lifecycle.
+
+## v0.2 additions
+
+- Official news indexes checked: [Riftbound publisher news](https://playriftbound.com/en-us/news/) and [Cyberpunk publisher blog](https://cyberpunktcg.com/blog). Both provide visible article cards suitable for a bounded headline-only adapter; custom RSS/Atom is supported separately.
+- [Cyberpunk Set Two announcement](https://cyberpunktcg.com/blog/set-2-announcement) illustrates why a publication date is not a launch date: an article can announce a future seasonal release window. The app stores publication dates only and links readers to the original article. It does not invent local launch dates or translate unspecified seasons into Australian dates.
+- Merchant country/state are explicit user-entered tags. They do not claim delivery coverage or address verification. Existing watches are Unspecified rather than guessed from AUD pricing.
+- Price analytics are per exact listing and observed time window. Activity charts count recorded check outcomes and browser open requests locally. We have no access to retailer analytics, sessions, unique visitors or sales; no estimated traffic is supplied as though it were measured.
+- Upgrade validation covers additive v1→v2 migration, metadata filters, publication parsing, RSS/Atom safety, source caching, filtered analytics and empty chart states. Windows/Linux packaging includes both GUI and executable launch checks.

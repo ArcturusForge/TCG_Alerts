@@ -72,8 +72,31 @@ class Database:
                 CREATE TABLE IF NOT EXISTS alerts (
                     id INTEGER PRIMARY KEY, watch_id INTEGER REFERENCES watches(id) ON DELETE SET NULL,
                     at TEXT NOT NULL, kind TEXT NOT NULL, message TEXT NOT NULL);
-                PRAGMA user_version=1;
             ''')
+            # Idempotent additive migration: preserve every v0.1 watch and observation.
+            columns = {r['name'] for r in c.execute('PRAGMA table_info(watches)')}
+            for name in ('game', 'country', 'state'):
+                if name not in columns:
+                    c.execute(f"ALTER TABLE watches ADD COLUMN {name} TEXT NOT NULL DEFAULT 'Unspecified'")
+            c.executescript('''
+                CREATE TABLE IF NOT EXISTS activity (
+                    id INTEGER PRIMARY KEY, watch_id INTEGER REFERENCES watches(id) ON DELETE SET NULL,
+                    at TEXT NOT NULL, kind TEXT NOT NULL, detail TEXT NOT NULL DEFAULT '');
+                CREATE INDEX IF NOT EXISTS activity_watch ON activity(watch_id, at);
+                CREATE TABLE IF NOT EXISTS news_sources (
+                    id INTEGER PRIMARY KEY, name TEXT NOT NULL, url TEXT NOT NULL UNIQUE,
+                    game TEXT NOT NULL, adapter TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1,
+                    checked TEXT, error TEXT, next_due REAL NOT NULL DEFAULT 0);
+                CREATE TABLE IF NOT EXISTS news_items (
+                    id INTEGER PRIMARY KEY, source_id INTEGER NOT NULL REFERENCES news_sources(id) ON DELETE CASCADE,
+                    url TEXT NOT NULL UNIQUE, title TEXT NOT NULL, published TEXT, first_seen TEXT NOT NULL,
+                    topic TEXT NOT NULL DEFAULT 'News');
+                PRAGMA user_version=2;
+            ''')
+            for name, url, game, adapter in (
+                ('Riftbound official', 'https://playriftbound.com/en-us/news/', 'Riftbound', 'riftbound'),
+                ('Cyberpunk official', 'https://cyberpunktcg.com/blog', 'Cyberpunk', 'cyberpunk')):
+                c.execute('INSERT OR IGNORE INTO news_sources(name,url,game,adapter) VALUES(?,?,?,?)', (name,url,game,adapter))
 
     @contextmanager
     def connect(self):
@@ -93,24 +116,33 @@ class Database:
     def watches(self):
         return self.rows('SELECT * FROM watches ORDER BY id DESC')
 
-    def add(self, url, label='', group_name='', target=None, shipping=None, restock=True):
+    def add(self, url, label='', group_name='', target=None, shipping=None, restock=True, game='Unspecified', country='Unspecified', state='Unspecified'):
         from .sources import validate_url
         url = validate_url(url)
+        from .catalog import metadata
+        game, country, state = metadata(game, country, state)
         if target is not None and (not isinstance(target, int) or target < 0):
             raise ValueError('Invalid target.')
         if shipping is not None and (not isinstance(shipping, int) or shipping < 0):
             raise ValueError('Invalid shipping.')
         with self.connect() as c:
-            return c.execute('INSERT INTO watches(url,label,group_name,target,shipping,restock) VALUES(?,?,?,?,?,?)',
-                             (url, label, group_name, target, shipping, int(restock))).lastrowid
+            return c.execute('INSERT INTO watches(url,label,group_name,target,shipping,restock,game,country,state) VALUES(?,?,?,?,?,?,?,?,?)',
+                             (url, label, group_name, target, shipping, int(restock), game, country, state)).lastrowid
 
     def update(self, watch_id, **fields):
-        allowed = {'label', 'group_name', 'target', 'shipping', 'restock', 'enabled'}
+        allowed = {'label', 'group_name', 'target', 'shipping', 'restock', 'enabled', 'game', 'country', 'state'}
         if not fields or not set(fields) <= allowed:
             raise ValueError('Invalid fields.')
         for key in ('target', 'shipping'):
             if fields.get(key) is not None and (not isinstance(fields[key], int) or fields[key] < 0):
                 raise ValueError('Invalid money amount.')
+        if set(fields) & {'game', 'country', 'state'}:
+            from .catalog import metadata
+            old = self.rows('SELECT * FROM watches WHERE id=?', (watch_id,))
+            if not old:
+                raise ValueError('Watch no longer exists.')
+            values = metadata(*(fields.get(k, old[0][k]) for k in ('game', 'country', 'state')))
+            fields.update(zip(('game', 'country', 'state'), values))
         with self.connect() as c:
             assignments = ','.join(k + '=?' for k in fields)
             c.execute(f'UPDATE watches SET {assignments},price_active=0,next_due=0 WHERE id=?', (*fields.values(), watch_id))
@@ -143,6 +175,7 @@ class Database:
             c.execute('''UPDATE watches SET title=?,currency=?,price=?,stock=?,source=?,checked=?,attempted=?,
                          error=NULL,failures=0,next_due=?,price_active=? WHERE id=?''',
                       (obs.title, obs.currency, obs.price, obs.stock, obs.source, at, at, due, int(active), watch_id))
+            c.execute('INSERT INTO activity(watch_id,at,kind) VALUES(?,?,?)', (watch_id, at, 'check_ok'))
             for kind, message in alerts:
                 c.execute('INSERT INTO alerts(watch_id,at,kind,message) VALUES(?,?,?,?)', (watch_id, at, kind, message))
         return alerts
@@ -152,6 +185,8 @@ class Database:
         with self.connect() as c:
             c.execute('UPDATE watches SET error=?,attempted=?,failures=failures+1,next_due=? WHERE id=?',
                       (str(error)[:600], now(), due, watch_id))
+            if c.execute('SELECT id FROM watches WHERE id=?', (watch_id,)).fetchone():
+                c.execute('INSERT INTO activity(watch_id,at,kind,detail) VALUES(?,?,?,?)', (watch_id, now(), 'check_failed', str(error)[:600]))
 
     def history(self, watch_id):
         return self.rows('SELECT * FROM observations WHERE watch_id=? ORDER BY id DESC LIMIT 1000', (watch_id,))
@@ -164,3 +199,42 @@ class Database:
             raise ValueError('Choose a backup path different from the active database.')
         with self.connect() as source, closing(sqlite3.connect(destination)) as target:
             source.backup(target)
+
+
+    def log_open(self, watch_id):
+        with self.connect() as c:
+            if c.execute('SELECT id FROM watches WHERE id=?', (watch_id,)).fetchone():
+                c.execute('INSERT INTO activity(watch_id,at,kind) VALUES(?,?,?)', (watch_id, now(), 'store_open'))
+
+    def add_news_source(self, name, url, game='Unspecified'):
+        from .sources import validate_url
+        from .catalog import metadata
+        if not name.strip():
+            raise ValueError('Enter a source name.')
+        game = metadata(game)[0]
+        with self.connect() as c:
+            return c.execute('INSERT INTO news_sources(name,url,game,adapter) VALUES(?,?,?,?)', (name.strip()[:120], validate_url(url), game, 'feed')).lastrowid
+
+    def news_sources(self):
+        return self.rows('SELECT * FROM news_sources ORDER BY id')
+
+    def set_news_enabled(self, source_id, enabled):
+        with self.connect() as c:
+            c.execute('UPDATE news_sources SET enabled=? WHERE id=?', (int(enabled), source_id))
+
+    def save_news(self, source_id, items, due):
+        with self.connect() as c:
+            for item in items:
+                c.execute('''INSERT INTO news_items(source_id,url,title,published,first_seen,topic) VALUES(?,?,?,?,?,?)
+                             ON CONFLICT(url) DO UPDATE SET title=excluded.title,published=COALESCE(excluded.published,news_items.published),topic=excluded.topic''',
+                          (source_id, item['url'], item['title'], item.get('published'), now(), item.get('topic', 'News')))
+            c.execute('UPDATE news_sources SET checked=?,error=NULL,next_due=? WHERE id=?', (now(), due, source_id))
+
+    def fail_news(self, source_id, message, due):
+        with self.connect() as c:
+            c.execute('UPDATE news_sources SET error=?,next_due=? WHERE id=?', (str(message)[:600], due, source_id))
+
+    def news(self):
+        return self.rows('''SELECT n.*,s.name AS source_name,s.game,s.checked,s.error,s.enabled FROM news_items n
+                            JOIN news_sources s ON s.id=n.source_id WHERE s.enabled=1
+                            ORDER BY COALESCE(n.published,n.first_seen) DESC LIMIT 500''')

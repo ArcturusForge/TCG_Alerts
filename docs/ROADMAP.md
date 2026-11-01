@@ -1,30 +1,28 @@
 # Delivery roadmap
 
-## v0.1 — implemented
+## v0.2 — implemented
 
-Single-PC executable source, exact URL watches, Shopify variant and single-offer JSON-LD adapters, one-page collection discovery, persistent observations, price/restock transitions, comparison groups, history, backups, exports and Windows/Linux packaging workflow.
+- Windows/Linux desktop packaging and launch checks.
+- Exact-product watchlists, background Shopify/JSON-LD checks, alerts, history, comparison groups, backups and CSV exports.
+- Country/state/game metadata and filters, with an additive upgrade from v0.1.
+- Cached official Riftbound/Cyberpunk publisher headlines, source health and custom RSS/Atom feeds.
+- Per-listing observed-price charts and local check/link-open activity charts, with evidence inspection.
 
-Release gate: unit tests, GUI smoke tests, live adapter probes and successful target-OS executable build. Do not call an artifact tested before the corresponding workflow succeeds.
+These views do not establish merchant verification, national delivery coverage, physical stock, comprehensive market pricing or retailer visitor traffic.
 
-## v0.2 — practical daily alerts
+## Recommended next priorities
 
-- Native notifications and system tray with explicit close/minimize behavior.
-- Telegram/email optional settings, secrets stored through OS credential services, durable delivery outbox, retries and test notifications.
-- Store-level health, configurable conservative intervals and durable per-host cooldowns.
-- Variant picker in the add-product flow instead of requiring URL edits.
-- Signed Windows installer and packaged executable launch test.
+1. **Verified Australian store registry and variant picker.** Make useful watches easier to create and prevent pack/box/case/language mismatches. Candidate retailers include Only Packs, Plenty of Games, GUF, Tezza's, Final Boss, Grand J, J Toys, Techzone and Obsession; these are candidates, not an asserted support list.
+2. **Native notifications and system tray.** Alerts should be useful while another application is in front. Add explicit close/minimize behavior and optional Telegram/email only with credentials, delivery retries and an outbox.
+3. **Release calendar.** Store source URL, region, date precision, confirmed/tentative status and last-verified timestamp. A seasonal announcement stays a window until an exact date is confirmed.
+4. **Delivered-cost comparison.** Add destination/postcode, pickup availability, shipping thresholds and explicit pack-count/unit-price metadata. Unknown shipping remains unknown.
+5. **Saved filtered views and bulk tags.** Useful as store coverage grows. Store-level metadata should propagate to its listings with a clear override rule.
+6. **Sourced demand indicators.** Keep search interest, local clicks, retailer visits, sales volume and stock changes separate. Add a metric only when a legitimate named source is available.
 
-## v0.3 — useful Australian store coverage
+## Retailer coverage acceptance
 
-- Confirm retailer permission and adapter behavior on an initial small Australian shortlist.
-- Candidate stores: Only Packs, Plenty of Games, GUF, Tezza's, Final Boss, Grand J, J Toys, Techzone and Obsession. These names are candidates, not verified supported adapters.
-- Store registry with evidence, region/currency, parser version and health; approved collection feeds/sitemaps and bounded pagination.
-- Manual product-matching review: game, set, language, edition, package, pack count, region and GTIN/SKU evidence. Propose matches; do not auto-merge low-confidence titles.
-- Shipping policies per destination, free-shipping thresholds and pickup availability. Keep unknowns visible.
-- Fixture captures with actual permission and no personal data; adapter regression checks.
+Check currency, exact selected variant, known sold-out/in-stock examples, preorder behavior, request policies/rate limits, comparison identity, freshness and failure displays. Preserve permitted parser fixtures without personal data. Add bounded approved feeds/sitemaps and pagination before broad catalog discovery. No login, CAPTCHA bypass or checkout automation.
 
-## Later — service scale
+## Service scale
 
-Only add Postgres, shared workers, queueing and accounts when several users or an always-on server justify them. The existing core is a starting point, not a promise of effortless scale. Introduce transactional alert delivery, migrations, retention/rollups, observability, access controls and a clear retailer contact process before broad unattended crawling. Browser fallback should be targeted and permitted rather than installed for every store.
-
-Acceptance for each retailer: currency verified, correct selected variant, known sold-out/in-stock fixtures, preorder handling reviewed, rate-limit behavior verified, comparison identity checked, and honest freshness/error displays. No trading or checkout automation is planned.
+Add Postgres, shared workers, queues and accounts only when multiple users or an always-on service justify them. Before broad unattended crawling, add database migrations, transactional external alert delivery, retention, observability, access controls and a retailer contact process. Monitoring on a PC still requires that PC to be awake and the app running.

@@ -8,7 +8,7 @@ from html.parser import HTMLParser
 from urllib import request, parse, robotparser, error
 from .core import Observation, money
 
-AGENT = 'TCGAlerts/0.1 (+personal desktop price monitor)'
+AGENT = 'TCGAlerts/0.2 (+personal desktop price monitor)'
 LIMIT = 4 * 1024 * 1024
 
 
