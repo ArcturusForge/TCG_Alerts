@@ -54,7 +54,7 @@ class Database:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.connect() as c:
-            if c.execute('PRAGMA user_version').fetchone()[0]>3:raise ValueError('This database requires a newer app version.')
+            if c.execute('PRAGMA user_version').fetchone()[0]>4:raise ValueError('This database requires a newer app version.')
             c.executescript('''
                 PRAGMA journal_mode=WAL;
                 CREATE TABLE IF NOT EXISTS watches (
@@ -100,6 +100,8 @@ class Database:
                 c.execute('INSERT OR IGNORE INTO news_sources(name,url,game,adapter) VALUES(?,?,?,?)', (name,url,game,adapter))
             from .storage_v3 import migrate
             migrate(c)
+            from .decks import migrate as migrate_decks
+            migrate_decks(c)
 
     @contextmanager
     def connect(self):

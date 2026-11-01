@@ -1,8 +1,8 @@
-# Deck builder and live cost tracker — proposed next milestone
+# Deck builder and live cost tracker — v0.4
 
-The requested extension is a deck manager with a priced bill of materials. This document is a researched design; v0.3 does not yet implement the deck builder or claim automated eBay sold-data access.
+v0.4 implements the initial deck manager: saved deck lists, quantities/owned/missing counts, printing notes, explicit singles-watch links, source-aware subtotals, text/CSV import/export, private URL/local artwork previews, and saved price snapshots. Automatic catalog/art discovery, sold-history providers, seller quantity checks and basket shipping optimization remain future integrations. No automated eBay sold-data access is claimed.
 
-## Useful first workflow
+## Workflow and remaining design
 
 Import/paste a quantity-and-name deck list, resolve each row to an exact card identity, choose acceptable printings and enter quantities owned. Display each card's needed/owned/missing quantities, observed unit price, line subtotal, source, currency, availability and last update. Save independent versions of decks and export a shopping list.
 

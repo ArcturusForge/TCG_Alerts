@@ -18,6 +18,7 @@ from .news import NewsMonitor
 from .panels import NewsPage, AnalyticsPage
 from .additions import Directory,Compare,Calendar,VariantPicker,delivery_editor
 from .desktop import Desktop
+from .decks_ui import DeckPage
 
 BG = '#0d1321'
 PANEL = '#151f32'
@@ -158,7 +159,7 @@ class App(tk.Tk):
         header = ttk.Frame(outer)
         header.pack(fill='x')
         ttk.Label(header, text='TCG / ALERTS', style='Heading.TLabel').pack(side='left')
-        ttk.Label(header, text='LOCAL DESKTOP  •  v0.3', style='Muted.TLabel').pack(side='right')
+        ttk.Label(header, text='LOCAL DESKTOP  •  v0.4', style='Muted.TLabel').pack(side='right')
         ttk.Label(outer, text='Your sealed product radar.', style='Title.TLabel').pack(anchor='w', pady=(24, 6))
         ttk.Label(outer, text='Track the exact product. See the evidence. Catch your price.', style='Muted.TLabel').pack(anchor='w')
         metrics = ttk.Frame(outer)
@@ -212,6 +213,8 @@ class App(tk.Tk):
         self.compare_page=Compare(self,self.tabs)
         self.tabs.add(self.compare_page,text='Compare')
         self.compare_table=self.compare_page.table
+        self.decks_page=DeckPage(self,self.tabs)
+        self.tabs.add(self.decks_page,text='Decks')
         self.analytics_page = AnalyticsPage(self, self.tabs)
         self.tabs.add(self.analytics_page, text='Analytics')
         self.news_page = NewsPage(self, self.tabs)
@@ -247,7 +250,9 @@ class App(tk.Tk):
         ttk.Label(settings,textvariable=self.native_status,style='Muted.TLabel',wraplength=1050).pack(anchor='w',pady=4)
         ttk.Button(settings, text='Export watchlist CSV', command=self.export).pack(anchor='w', pady=6)
         ttk.Button(settings, text='Back up complete database', command=self.backup).pack(anchor='w', pady=6)
-        ttk.Label(outer, textvariable=self.status, style='Muted.TLabel').pack(anchor='w', pady=(12, 0))
+        ttk.Label(outer, textvariable=self.status, style='Muted.TLabel').pack(side='bottom',anchor='w', pady=(12, 0))
+        self.tabs.pack_forget()
+        self.tabs.pack(fill='both',expand=True)
 
     def start_discovery(self):
         from .sources import Client, discover
@@ -328,7 +333,8 @@ class App(tk.Tk):
         selected = self.table.selection() if hasattr(self, 'table') else ()
         all_watches = self.db.watches()
         for key, all_value, defaults in (('game', 'All games', GAMES), ('country', 'All countries', COUNTRIES), ('state', 'All states', AU_STATES)):
-            self.tag_boxes[key].configure(values=[all_value, *dict.fromkeys([*defaults, *(w[key] for w in all_watches)])])
+            extra_games=[d['game'] for d in self.decks_page.store.decks()] if key=='game' else []
+            self.tag_boxes[key].configure(values=[all_value, *dict.fromkeys([*defaults, *extra_games, *(w[key] for w in all_watches)])])
         watches = self.scope()
         self.rows = {str(w['id']): w for w in watches}
         counts = [sum(bool(w['enabled']) for w in watches), sum(self.healthy(w) and w['stock'] == 'in_stock' for w in watches), sum(self.at_target(w) for w in watches), sum(w['enabled'] and (bool(w['error']) or self.stale(w)) for w in watches)]
@@ -365,6 +371,7 @@ class App(tk.Tk):
                 continue
             self.alert_table.insert('', 'end', values=(self.local(a['at']), a['kind'], a['message']))
         self.compare_page.refresh()
+        self.decks_page.refresh()
         self.calendar_page.refresh()
         self.directory_page.refresh()
         self.selection()
@@ -472,6 +479,8 @@ class App(tk.Tk):
                     if self.native_enabled.get():self.desktop.notify(payload)
                     self.status.set('ALERT • ' + payload)
                     changed = True
+                elif kind == 'deck_art':
+                    self.decks_page.art_received(*payload)
                 elif kind == 'variant_options':
                     dialog,requested,options,error=payload
                     if dialog.winfo_exists():dialog.receive(requested,options,error)

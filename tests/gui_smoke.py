@@ -7,6 +7,8 @@ from tcg_alerts.core import Database, Observation
 from tcg_alerts.app import App, WatchDialog
 from tcg_alerts.panels import NewsSources
 from tcg_alerts.additions import Rules,VariantPicker,delivery_editor
+from tcg_alerts.decks_ui import CardEditor,ListImport
+from tcg_alerts.decks import parse_list
 from unittest.mock import patch
 
 with tempfile.TemporaryDirectory() as directory:
@@ -80,6 +82,34 @@ with tempfile.TemporaryDirectory() as directory:
         assert app.winfo_exists() and app.state()=='withdrawn'
         app.deiconify();app.close_to_tray.set(False)
     with patch.object(app.desktop,'available',return_value=False):assert not app.minimize_to_tray()
+    app.update()
+    page=app.decks_page
+    deck=page.store.save_deck('GUI fixture deck','Riftbound','AUD')
+    page.store.import_rows(deck,parse_list('[Main]\n3 Fixture Card\n[Sideboard]\n1 Other Card'))
+    page.refresh(deck)
+    assert len(page.table.get_children())==2
+    row=page.store.report(deck)['lines'][0]
+    page.table.selection_set(str(row['id']));page.select()
+    editor=CardEditor(page,row)
+    editor.vars['manual_price'].set('5.00');editor.vars['reference_checked'].set('2026-11-02')
+    editor.vars['owned'].set('1');editor.save()
+    assert page.store.report(deck)['summary']['reference_subtotal']==1500
+    page.store.snapshot(deck);page.history()
+    importer=ListImport(page);importer.text.insert('1.0','2 New Fixture Card');importer.save()
+    assert len(page.store.report(deck)['lines'])==3
+    # Changing printing resets confirmation rather than reusing consent for another card variant.
+    row=page.store.report(deck)['lines'][0]
+    editor=CardEditor(page,row);editor.confirm.set(True);editor.vars['printing'].set('Foil')
+    assert not editor.confirm.get() and not editor.vars['manual_price'].get();editor.destroy()
+    page.table.selection_set(str(row['id']));page.select()
+    from PIL import Image
+    page.art_received(row['id'],page._art_token,Image.new('RGB',(180,250),'navy'),None)
+    app.update()
+    assert page.photo is not None
+    old_token=page._art_token
+    other=page.store.save_deck('Empty GUI deck','Riftbound');page.refresh(other)
+    page.art_received(row['id'],old_token,Image.new('RGB',(180,250),'red'),None)
+    assert page.art is None
     app.update()
     app.close()
 print('GUI smoke passed')

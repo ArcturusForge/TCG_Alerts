@@ -52,3 +52,10 @@ Calendar sources: [Cyberpunk production diary](https://cyberpunktcg.com/blog/pro
 [Only Packs shipping policy](https://onlypackstcg.com.au/policies/shipping-policy) describes checkout-calculated shipping and promotions. We did not seed an unconditional rate from a product banner. User-entered country/postcode/currency estimates carry evidence and entered dates.
 
 Native notifications follow [pystray's API](https://pystray.readthedocs.io/en/latest/usage.html). Callbacks queue commands to the Tk thread. Windows is supported; other platforms preserve a visible app. Lifecycle tests use a fake icon, while packaged Windows launch tests import the native backend. Neither claims to prove notification visibility under an individual user's OS settings.
+
+
+## v0.4 implementation notes — 2 November 2026
+
+The private artwork feature accepts user-supplied HTTPS image URLs or explicit local file selections. It bundles no third-party card artwork and performs no bulk catalog scraping. [Pillow's image documentation](https://pillow.readthedocs.io/en/stable/reference/Image.html) informed lazy-open/dimension checks, thumbnailing and malformed-image handling. Requests and decoded dimensions are bounded; ImageTk objects are created only on the GUI thread.
+
+Deck estimates reuse existing watched singles URLs after explicit one-copy identity confirmation. Manual references, observed asking prices and fresh in-stock offers remain distinct. Reference subtotals expose priced-copy coverage; stale/failed/paused observations can contribute only a labelled reference, not a fresh purchase offer. Price/quantity arithmetic, currency isolation, import rollback, watch deletion, image decoding and the v3→v4 migration are covered by regression tests. The earlier provider research remains a dated design reference; no eBay or catalog API integration was silently added.

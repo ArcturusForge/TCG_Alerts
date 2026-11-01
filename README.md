@@ -1,8 +1,8 @@
 # TCG Alerts
 
-A private desktop radar for sealed TCG prices and restocks. Built for a Windows PC first, with Linux source support. No hosted server, subscription or API keys are required. Source needs Python with Tk; Windows tray dependencies are included in the executable.
+A private desktop radar for sealed TCG prices and restocks. Built for a Windows PC first, with Linux source support. No hosted server, subscription or API keys are required. Source needs Python with Tk and Pillow; Windows also uses pystray. Dependencies are included in packaged executables.
 
-**Status: working v0.3 MVP, not yet a full-store aggregation service.** It monitors exact product URLs that you choose. It does not claim coverage of 150 stores, verified merchants, physical inventory or guaranteed restock detection.
+**Status: working v0.4 MVP, not yet a full-store aggregation service.** It monitors exact product URLs that you choose. It does not claim coverage of 150 stores, verified merchants, physical inventory or guaranteed restock detection.
 
 ## Start
 
@@ -106,4 +106,47 @@ In a new watch dialog, **Pick Shopify variant** loads exact options, reported pr
 
 Legacy blank-postcode quotes apply only with a blank Compare postcode. They never become destination-specific quotes automatically. Pickup requires an explicit listing/store policy and remains an estimate requiring item eligibility/readiness confirmation. Extras, duties and basket discounts are not calculated. Compare destination rules do not redefine alert targets: those still use item price plus the watch's entered fixed shipping, if present. Database upgrade is additive and preserves observations, alerts and prior metadata.
 
-The deck-builder idea and researched data-source boundaries are specified in [DECK_BUILDER.md](docs/DECK_BUILDER.md). It is a proposed next milestone, not part of this executable.
+The initial deck builder is implemented in v0.4 below. [DECK_BUILDER.md](docs/DECK_BUILDER.md) records the design and remaining provider integrations.
+
+
+## v0.4 — private deck builder and cost tracker
+
+Open **Decks**. Create a named deck with a game and pricing currency. Add cards manually or append a plain text list such as:
+
+```text
+[Legend]
+1 Example Champion
+[Main]
+3 Card Name
+2x Another Card
+[Sideboard]
+1 Sideboard Card
+```
+
+Imports preserve names/sections as supplied and do not silently match them to prices or art. Edit a row to record required/owned quantities, set/collector number, printing, language and condition. Ownership is a per-deck planning count, not a shared collection ledger or a reservation of cards across several decks. Decks can be copied; copies retain those planning counts. No game-format legality check is claimed. Game/currency cannot be changed while a deck has card rows, preventing accidental relabelling/conversion of its prices.
+
+### References and buying offers
+
+Optionally enter a manual **unit reference**, source/evidence text and source date in the deck currency. Alternatively, a linked watch's last observed same-currency asking price can serve as the reference, including when stale/paused/sold out; its basis is labelled. These are planning references, not automatic eBay sold-price valuations.
+
+Link a preferred monitored singles watch in **Edit card**. Confirm that its price is for **one copy of the exact printing/language/condition**. Changing identity fields resets listing confirmation and clears the old manual reference; selecting another watch also resets confirmation. Region/game filters limit the offered watch choices; an existing link remains editable even if outside the current region filter. A deck always retains all its card rows in totals. Store-location filters never make unwanted cards disappear from a deck's arithmetic.
+
+The breakdown shows required, owned and missing copies; unit/line references; and fresh asking prices/missing-copy asking subtotals. The summary separates:
+
+- Reference subtotal for all required copies, with priced-copy coverage.
+- Reference subtotal for missing copies, with coverage.
+- Fresh missing-item asking subtotal, with coverage, excluding shipping.
+
+Unknown cards/prices remain visibly unpriced rather than contributing zero to an asserted complete total. An explicitly entered zero reference is treated as priced. Different currencies are never converted/added together. Fresh buying estimates require an enabled, error-free, in-stock linked watch checked within 30 minutes. Seller quantity is unverified: an in-stock flag does not prove that three copies can be supplied. Manual references and stale/failed/sold-out listings are not presented as fresh buying offers. Changing a monitored price updates linked deck estimates on the next GUI refresh.
+
+No new source or eBay credentials are required for this first version: reuse explicit singles URLs and the existing monitor. Third-party card-name search, automatic catalog/artwork discovery, approved eBay sold-data feeds, seller quantity feeds, deck budget alerts and basket-aware shipping optimization remain future integrations. The ordinary store alerts and watch history continue to work.
+
+### Private artwork
+
+Set an HTTPS image URL in Edit card and choose **Load artwork**, or choose a local image file. **Use URL instead** clears the saved local-file preference. Artwork is loaded on demand in a background worker; it is not required for card pricing, and unavailable/corrupt images show an error without breaking the deck. Preview responses are bounded to 8 MB and 20 megapixels. No artwork is bundled, published or copied into the repository. The database saves supplied URLs/local paths; database backup does **not** include the local image files themselves. URL requests go directly to the supplied image host, not to our server.
+
+### CSV and snapshots
+
+Import/export card-row CSV with names, quantities, ownership, identity notes, manual reference amounts/currency/source dates and image URLs. CSV import appends atomically: an invalid row prevents partial insertion. Watch links are exported as URLs for reference but are not automatically trusted/recreated on import; confirm them in Edit card. Local file paths are never imported/exported. Formula-looking text is escaped for spreadsheet safety.
+
+Use **Save price snapshot** to record the current subtotals, copy coverage and the exact row/price evidence used. **Snapshot history** shows the latest 500 saved values and lets you inspect their evidence. Its chart uses the current deck currency and omits snapshots with no priced copies. These are explicit saved estimates, not an invented continuous market-price history; composition, ownership and reference choices may change between snapshots. Decks, rows and snapshots are included in the normal SQLite backup. Removing a deck row/deck does not delete its store watches; deleting a watch keeps its deck rows and any manual references intact.

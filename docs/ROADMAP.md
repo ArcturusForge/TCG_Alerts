@@ -32,3 +32,10 @@ Add Postgres, shared workers, queues and accounts only when multiple users or an
 Sourced starter store directory, exact Shopify variant picker, Windows tray notifications/controls, explicit release/prerelease calendar with `.ics` export, and destination-based shipping/per-pack estimates. Initial sources are dated snapshots; shipping quotes are user entered; native Linux tray and email/Telegram are not included. Existing watches/history migrate additively.
 
 Next proposal: [deck builder and live cost tracker](DECK_BUILDER.md), with exact printing identity, owned/missing quantities, provider-aware pricing and no assumed access to eBay sold history.
+
+
+## v0.4 — initial deck builder delivered
+
+Saved decks, card quantities and ownership, printing/language/condition notes, explicit monitored one-copy singles links, separate reference/asking subtotals with copy coverage, text/CSV import/export, user-supplied URL/local art previews, and explicit price snapshots with evidence/history. Existing watches and all previous features are retained by an additive upgrade.
+
+Next: catalog search/import adapters, more automated image discovery, verified seller quantities, shared collection allocations, permitted sold-reference feeds and basket-aware shipping. No automatic eBay sold-history access or legal-deck certification is claimed by v0.4.
