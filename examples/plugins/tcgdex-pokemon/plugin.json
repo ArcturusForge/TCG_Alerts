@@ -1,10 +1,12 @@
 {
   "api_version": 1,
   "id": "tcgdex-pokemon",
-  "name": "TCGdex · Pokémon (English)",
-  "version": "1.0.0",
+  "name": "TCGdex \u00b7 Pok\u00e9mon (English)",
+  "version": "0.6.0",
   "kind": "catalogue-json",
-  "games": ["Pokémon"],
+  "games": [
+    "Pok\u00e9mon"
+  ],
   "homepage": "https://tcgdex.dev",
   "api_url": "https://api.tcgdex.net/v2/en/cards",
   "query_parameter": "name",
@@ -15,5 +17,9 @@
     "name": "name",
     "image_url": "image",
     "collector": "localId"
+  },
+  "update": {
+    "repository": "ArcturusForge/TCG_Alerts",
+    "asset": "TCGAlerts-plugin-tcgdex-pokemon.zip"
   }
 }

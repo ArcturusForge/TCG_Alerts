@@ -35,10 +35,13 @@ These run as local code with the same permissions as the app. Enable only truste
 
 Store readers receive the normal bounded HTTP client with robot permission checks, spacing, response limits and cooldowns. Catalogue readers receive a bounded API client: documented machine APIs are consumed under their API contract rather than treating their HTML-crawler robots rules as an API authorization contract. API providers remain responsible for the endpoint’s access terms and rate limits. Providers must preserve those source-access policies and avoid turning errors/challenge pages into price observations. Worker methods must not access Tk widgets. Providers should bound network calls and return promptly; they are trusted in-process code, not process-sandboxed or forcibly interruptible. Reload affects subsequent calls; an in-flight call may finish using the previous instance.
 
-Game-specific deck validation, price-feed plugins, arbitrary UI panels and a marketplace/updater are future capabilities; v1 deliberately concentrates on card catalogues and product readers.
+Game-specific deck validation, price-feed plugins, arbitrary UI panels and a plugin marketplace are future capabilities; v1 deliberately concentrates on card catalogues and product readers.
 
 ## Browser compatibility / blocked sources
 
 Use a public JSON/API endpoint when it provides the exact product, currency and variant. For a genuinely JavaScript-rendered page, an optional browser sidecar can render the page before the store reader parses it. Playwright documents Chromium/Firefox/WebKit and requires its own package/browser installation. TLS/browser compatibility transports such as curl_cffi solve a different class of compatibility issues and do not supply a JavaScript engine. No such dependency, proxy rotation service or challenge solver is bundled in this release: the live tested stores worked through the normal adapter. Choose and test a transport against a concrete failing source before shipping one. A failed request must never generate a restock or price event.
 
 References: [MO2 Python plugins](https://www.modorganizer.org/python-plugins-doc/writing-plugins.html), [OpenRift API](https://openrift.app/developers), [TCGdex cards](https://tcgdex.dev/rest/cards), [TCGdex assets](https://tcgdex.dev/assets), [Playwright library](https://playwright.dev/python/docs/library), [curl_cffi](https://curl-cffi.readthedocs.io/).
+
+
+GitHub release updates and installation are now implemented in v0.6; see [UPDATES.md](UPDATES.md). Optional `cache_seconds` (0–86400) and provider version control the local catalogue cache. The Cyberpunk example uses exact-name lookup and a five-minute cache.

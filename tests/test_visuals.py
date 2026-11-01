@@ -1,4 +1,4 @@
-import json,queue,tempfile,time,unittest
+import json,os,queue,tempfile,time,unittest
 from pathlib import Path
 from unittest.mock import Mock
 from PIL import Image
@@ -23,6 +23,8 @@ class VisualTests(unittest.TestCase):
             service.request('https://images.example/card','',lambda *v:received.append(v))
             service.request('https://images.example/card','',lambda *v:received.append(v))
             self.deliver(service,events);self.assertEqual(loader.call_count,1);self.assertEqual(len(received),2)
+            # Windows file timestamps can be slightly ahead of time.time(); even a future mtime must not bypass expiry.
+            cache=next((self.root/'art').glob('*.png'));future=time.time()+60;os.utime(cache,(future,future))
             loader.side_effect=OSError('offline')
             service.request('https://images.example/card','',lambda *v:received.append(v));self.deliver(service,events)
             self.assertIsNotNone(received[-1][0]);self.assertIn('unavailable',received[-1][1])
@@ -31,6 +33,7 @@ class VisualTests(unittest.TestCase):
     def test_disk_cache_reused_by_next_session_and_local_file_identity_changes(self):
         events=queue.Queue();loader=Mock(return_value=Image.new('RGB',(90,130)));service=ImageService(self.root/'art',events,loader=loader)
         service.request('https://images.example/card','',lambda *v:None);self.deliver(service,events);service.close()
+        cache=next((self.root/'art').glob('*.png'));past=time.time()-60;os.utime(cache,(past,past))
         second=ImageService(self.root/'art',events,loader=Mock(side_effect=OSError('offline')));received=[]
         try:
             second.request('https://images.example/card','',lambda *v:received.append(v));self.deliver(second,events)

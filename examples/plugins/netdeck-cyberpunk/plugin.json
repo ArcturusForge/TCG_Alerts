@@ -1,0 +1,14 @@
+{
+  "api_version": 1,
+  "id": "netdeck-cyberpunk",
+  "name": "NetDeck · Cyberpunk exact-name lookup",
+  "version": "0.6.0",
+  "kind": "python",
+  "games": ["Cyberpunk"],
+  "capabilities": ["catalogue"],
+  "cache_seconds": 300,
+  "update": {
+    "repository": "ArcturusForge/TCG_Alerts",
+    "asset": "TCGAlerts-plugin-netdeck-cyberpunk.zip"
+  }
+}

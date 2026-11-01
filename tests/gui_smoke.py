@@ -146,6 +146,7 @@ with tempfile.TemporaryDirectory() as directory:
     guide=app.show_guide();app.update();guide.destroy()
     from tcg_alerts.catalogue_ui import CatalogueSearch
     catalogue=CatalogueSearch(page);catalogue.receive(catalogue.token,[], 'Fixture empty search');app.update();catalogue.close()
+    updates=app.show_updates();app.update();updates.destroy()
     manager=app.manage_plugins();app.update();assert len(manager.table.get_children())==1;manager.destroy()
     app.geometry('1180x700');app.update()
     assert page.gallery.winfo_height()>80

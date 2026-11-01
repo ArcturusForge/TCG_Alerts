@@ -34,7 +34,8 @@ def open_backup(app):
         destination=restore_copy(source,app.db.path.parent/'restored_backups')
         args=[sys.executable]
         if not getattr(sys,'frozen',False):args.append(str(Path(__file__).resolve().parents[1]/'run.py'))
-        subprocess.Popen([*args,'--database',str(destination)])
+        from .processes import spawn
+        spawn([*args,'--database',str(destination)])
         app.status.set('Opened a separate restored copy. This window and your current database remain unchanged.')
     except (OSError,sqlite3.Error,ValueError) as e:messagebox.showerror('Could not open backup',str(e),parent=app)
 

@@ -32,7 +32,7 @@ class ImageService:
         key=self.key(url,path)
         if key in self.memory:
             image,checked,status=self.memory[key]
-            if time.time()-checked<self.ttl:
+            if 0<=time.time()-checked<self.ttl:
                 self.memory.move_to_end(key);callback(image,status);return
         if key in self.pending:
             self.pending[key].append(callback);return
@@ -48,7 +48,7 @@ class ImageService:
                 if cache.exists():
                     try:
                         image=decode(cache.read_bytes())
-                        if time.time()-cache.stat().st_mtime<self.ttl:return image,'Saved image',cache.stat().st_mtime
+                        if 0<=time.time()-cache.stat().st_mtime<self.ttl:return image,'Saved image',cache.stat().st_mtime
                     except Exception:cache.unlink(missing_ok=True)
                 fresh=self.loader(url,path)
                 tmp=cache.with_suffix('.tmp');fresh.save(tmp,format='PNG');tmp.replace(cache)

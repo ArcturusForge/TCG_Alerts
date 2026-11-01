@@ -93,7 +93,7 @@ class DeckPage(ttk.Frame):
         for title,action in primary:ttk.Button(controls,text=title,command=action).pack(side='left',padx=(0,6))
         more=ttk.Menubutton(controls,text='More deck actions ▾');more.pack(side='left')
         menu=tk.Menu(more,tearoff=False,bg='#151f32',fg='#e9effa',activebackground='#2d4961',activeforeground='#e9effa')
-        for title,action in [('Edit deck',lambda:self.edit_deck(True)),('Copy deck',self.copy),('Delete deck',self.delete),('Import CSV',self.import_csv),('Remove selected card',self.remove),('Export CSV',self.export),('Save price snapshot',self.snapshot),('Snapshot history',self.history)]:menu.add_command(label=title,command=action)
+        for title,action in [('Edit deck',lambda:self.edit_deck(True)),('Copy deck',self.copy),('Delete deck',self.delete),('Import CSV',self.import_csv),('Remove selected card',self.remove),('Export CSV',self.export),('Save price snapshot',self.snapshot),('Snapshot history',self.history),('Missing-card budget alert…',self.budget_alert)]:menu.add_command(label=title,command=action)
         more.configure(menu=menu)
         self.summary=tk.StringVar(value='Create a deck or import a list to start.');ttk.Label(self,textvariable=self.summary,style='Muted.TLabel',wraplength=1250).pack(anchor='w',pady=6)
         view_tools=ttk.Frame(self);view_tools.pack(fill='x',pady=(0,8))
@@ -163,6 +163,9 @@ class DeckPage(ttk.Frame):
         self.app.db.set_setting('deck_view',self.view.get())
     def gallery_select(self,key):
         if self.table.exists(key):self.table.selection_set(key);self.select()
+    def budget_alert(self):
+        from .deck_alerts import configure
+        return configure(self)
     def overview(self):
         from .deck_charts import show
         return show(self)

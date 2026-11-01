@@ -1,8 +1,8 @@
 """Install declarative providers and enable trusted external Python providers at runtime."""
-import json,os,subprocess,sys
+import json,os,subprocess,sys,threading,shutil
 from pathlib import Path
 import tkinter as tk
-from tkinter import ttk,filedialog,messagebox
+from tkinter import ttk,filedialog,messagebox,simpledialog
 from .plugins import validate_manifest
 
 
@@ -13,7 +13,7 @@ class PluginManager(tk.Toplevel):
         ttk.Label(self,text='JSON providers map public card APIs. Python plugins can add card catalogues and store readers.\nPython plugins run with your account permissions: enable code only from authors you trust. New plugins start disabled.',style='Muted.TLabel',padding=(16,0),wraplength=920).pack(anchor='w')
         self.table=app.make_table(self,[('name','Provider',210),('games','Games',180),('kind','Type',140),('state','Status',350)])
         tools=ttk.Frame(self,padding=16);tools.pack(fill='x')
-        for label,command in [('Install JSON provider…',self.install),('Open plugin folder',self.open_folder),('Enable / disable',self.toggle),('Reload providers',self.reload)]:ttk.Button(tools,text=label,command=command).pack(side='left',padx=(0,8))
+        for label,command in [('Install JSON provider…',self.install),('Install from GitHub…',self.install_github),('Open plugin folder',self.open_folder),('Enable / disable',self.toggle),('Reload providers',self.reload)]:ttk.Button(tools,text=label,command=command).pack(side='left',padx=(0,8))
         ttk.Label(self,text=str(app.plugins.directory),style='Muted.TLabel',padding=16).pack(anchor='w')
         self.refresh()
     def refresh(self):
@@ -29,6 +29,33 @@ class PluginManager(tk.Toplevel):
         row=self.rows[ids[0]]
         if not row.get('id'):return
         self.app.plugins.enable(row['id'],not row['enabled']);self.refresh();self.app.refresh()
+    def install_github(self):
+        repository=simpledialog.askstring('GitHub plugin','GitHub owner/repository:',initialvalue='ArcturusForge/TCG_Alerts',parent=self)
+        if not repository:return
+        asset_name=simpledialog.askstring('Plugin release asset','ZIP asset name (for example TCGAlerts-plugin-netdeck-cyberpunk.zip):',initialvalue='TCGAlerts-plugin-netdeck-cyberpunk.zip',parent=self)
+        if not asset_name:return
+        self.app.update_status.set('Downloading and checking plugin release…')
+        def worker():
+            try:
+                from .updates import Releases,repo_name,select_asset,install_version
+                repo_name(repository);client=Releases();release=client.latest(repository)
+                def validate(folder):
+                    paths=list(folder.rglob('plugin.json'))
+                    if len(paths)!=1:raise ValueError('Plugin ZIP must contain exactly one manifest.')
+                    manifest=validate_manifest(json.loads(paths[0].read_text()))
+                    if manifest.get('update')!=dict(repository=repository,asset=asset_name):raise ValueError('Manifest update source must match the selected repository and asset.')
+                safe_name=__import__('hashlib').sha256((repository+asset_name).encode()).hexdigest()[:20]
+                folder=install_version(client,repository,release,select_asset(release,asset_name),self.app.updates.root/('install-'+safe_name),validate)
+                manifest_path=next(folder.rglob('plugin.json'));manifest=validate_manifest(json.loads(manifest_path.read_text()))
+                target=self.app.plugins.directory/manifest['id']
+                if target.exists():raise ValueError('Provider is already installed; use its automatic updater instead.')
+                stage=target.with_name(target.name+'.updating')
+                if stage.exists():shutil.rmtree(stage)
+                shutil.copytree(manifest_path.parent,stage);stage.rename(target)
+                self.app.monitor.events.put(('plugin_installed',manifest['name']+' installed. Enable it in Game / store plugins.'))
+            except Exception as e:self.app.monitor.events.put(('update_status','Plugin installation: '+str(e)))
+        threading.Thread(target=worker,daemon=True).start()
+
     def open_folder(self):
         directory=str(self.app.plugins.directory)
         if sys.platform=='win32':os.startfile(directory)

@@ -22,6 +22,8 @@ from .decks_ui import DeckPage
 from .shell import CollectorShell
 from .visuals import ImageService
 from .plugins import PluginRegistry
+from .updates import UpdateCoordinator
+from .browser_helper import BrowserHelper
 
 BG = '#0d1321'
 PANEL = '#151f32'
@@ -104,6 +106,10 @@ class App(tk.Tk):
         self.db = db
         self.plugins = PluginRegistry(db.path.parent / 'plugins', db)
         self.monitor = Monitor(db, fetcher=self.plugins.fetch)
+        self.browser_helper = BrowserHelper(db.path.parent/'browser_helper', lambda text:self.monitor.events.put(('update_status',text)))
+        if db.setting('browser_helper_enabled',True):self.monitor.client.browser_helper=self.browser_helper
+        self.updates=UpdateCoordinator(self)
+        self.update_status=tk.StringVar(value=self.updates.status)
         self.images = ImageService(db.path.parent / 'artwork_cache', self.monitor.events)
         self.news_monitor = NewsMonitor(db, self.monitor.events)
         self.desktop=Desktop(self.monitor.events)
@@ -129,6 +135,7 @@ class App(tk.Tk):
             self.monitor.start()
             self.news_monitor.start()
             self.desktop.start()
+            self.updates.start()
         self.after(250, self.drain)
 
     def style_ui(self):
@@ -267,7 +274,7 @@ class App(tk.Tk):
         getting_started=ttk.Frame(settings);getting_started.pack(fill='x',pady=(0,10))
         ttk.Button(getting_started,text='Getting started (F1)',command=self.show_guide).pack(side='left')
         ttk.Button(getting_started,text='Game / store plugins',command=self.manage_plugins).pack(side='left',padx=10)
-        ttk.Button(getting_started,text='Download / check new builds',command=lambda:webbrowser.open('https://github.com/ArcturusForge/TCG_Alerts/actions/workflows/desktop.yml')).pack(side='left',padx=10)
+        ttk.Button(getting_started,text='Updates / browser helper',command=self.show_updates).pack(side='left',padx=10)
         ttk.Label(settings, text='Private by default.', style='Heading.TLabel').pack(anchor='w')
         ttk.Label(settings, text='Checks run every 15 minutes while this app is open. Sleeping or closing the PC stops checks.\nFailures back off automatically. Manual checks respect the scheduled cooldown.\nAlerts are saved here and ring the bell. Windows native tray notifications are supported; email/Telegram are not configured.\nThe app reads public Shopify product data and single-offer JSON-LD pages.\nIt respects robots.txt and does not bypass login, CAPTCHA or blocked storefronts.\n\nYour database: ' + str(self.db.path), style='Muted.TLabel', wraplength=1000).pack(anchor='w', pady=18)
         self.native_enabled=tk.BooleanVar(value=self.db.setting('native_notifications',True))
@@ -289,6 +296,20 @@ class App(tk.Tk):
         self.bind('<Control-1>', lambda e: self.tabs.select(self.watch_page))
         self.bind('<Control-f>', self.focus_search)
         self.bind('<F1>',lambda e:self.show_guide())
+
+    def show_updates(self):
+        from .updates_ui import show
+        return show(self)
+
+    def apply_update(self):
+        import sys,subprocess
+        pending=self.updates.pending
+        if not pending:self.update_status.set('No downloaded update is ready. Check updates first.');return
+        if getattr(sys,'frozen',False) and sys.platform=='win32':self._apply_update_now=True;self.close()
+        else:
+            from .processes import spawn
+            spawn([pending['executable'],'--database',str(self.db.path)])
+            self.close()
 
     def manage_plugins(self):
         from .plugins_ui import PluginManager
@@ -432,11 +453,18 @@ class App(tk.Tk):
             self.empty_title.configure(text='Your next find starts here' if not all_watches else 'No matching products')
             self.empty_text.configure(text='Paste a store product link, choose a target price, and we’ll watch it for you.' if not all_watches else 'Try another search or clear the game and region filters.')
             self.empty_watch.place(relx=.5, rely=.5, anchor='center')
+        from .deck_alerts import evaluate
+        for event in evaluate(self.db):
+            self.bell()
+            if self.native_enabled.get():self.desktop.notify(event['message'])
+            self.status.set('ALERT • '+event['message'])
         self.alert_table.delete(*self.alert_table.get_children())
         for a in self.db.alerts():
             if str(a['watch_id']) not in self.rows:
                 continue
             self.alert_table.insert('', 'end', values=(self.local(a['at']), a['kind'], a['message']))
+        for event in self.db.setting('deck_budget_alerts',[]):
+            if self.game_filter.get() in ('All games',event['game']):self.alert_table.insert('', 'end', values=(self.local(event['at']),event['kind'],event['message']))
         self.compare_page.refresh()
         self.decks_page.refresh()
         self.calendar_page.refresh()
@@ -550,6 +578,16 @@ class App(tk.Tk):
                     if self.native_enabled.get():self.desktop.notify(payload)
                     self.status.set('ALERT • ' + payload)
                     changed = True
+                elif kind == 'plugin_installed':
+                    self.plugins.reload()
+                    self.update_status.set(payload)
+                    self.status.set(payload)
+                    self.refresh()
+                elif kind == 'update_status':
+                    self.update_status.set(payload)
+                elif kind == 'update_ready':
+                    self.updates.pending=payload
+                    self.update_status.set('Update '+payload['version']+' is ready. It will apply when the packaged Windows app closes.')
                 elif kind == 'visual_image':
                     self.images.receive(*payload)
                 elif kind == 'catalogue_result':
@@ -610,6 +648,20 @@ class App(tk.Tk):
     def close(self):
         if self._closing:return
         self._closing=True
+        self.updates.close()
+        self.monitor.close()
+        self.news_monitor.close()
+        if self.updates.pending and (self.db.setting('auto_updates',True) or getattr(self,'_apply_update_now',False)):
+            import sys,os
+            if getattr(sys,'frozen',False) and sys.platform=='win32':
+                from .updates import schedule_windows_update
+                try:
+                    from .updates import version
+                    tag='.'.join(map(str,version(self.updates.pending['version'])))
+                    self.db.backup(self.updates.root/('pre-update-'+tag+'.sqlite3'))
+                    schedule_windows_update(self.updates.pending,sys.executable,os.getpid(),self.updates.root,self.db.path)
+                except Exception as e:self.update_status.set('Update remains staged: '+str(e))
+        self.browser_helper.close()
         self.images.close()
         self.desktop.stop()
         self.monitor.close()
@@ -620,8 +672,16 @@ class App(tk.Tk):
 def main():
     parser = argparse.ArgumentParser(description='TCG Alerts desktop tracker')
     parser.add_argument('--database', type=str)
+    parser.add_argument('--helper-smoke-test', type=str, help='Check the installed browser helper without starting normal monitoring')
     parser.add_argument('--smoke-test', action='store_true', help='Open and close a temporary empty GUI without network checks')
     args = parser.parse_args()
+    if args.helper_smoke_test:
+        helper=BrowserHelper(args.helper_smoke_test)
+        try:
+            helper.ensure()
+            if 'Example Domain' not in helper.solve('https://example.com/'):raise ValueError('Unexpected helper test page.')
+        finally:helper.close()
+        return
     if args.smoke_test:
         import sys
         if sys.platform=='win32':

@@ -1,4 +1,4 @@
-"""Conservative public storefront adapters; no login, cart writes or anti-bot bypass."""
+"""Conservative public storefront adapters; no login or cart writes; optional browser rendering for public pages."""
 from __future__ import annotations
 import http.cookiejar
 import json
@@ -8,7 +8,7 @@ from html.parser import HTMLParser
 from urllib import request, parse, robotparser, error
 from .core import Observation, money
 
-AGENT = 'TCGAlerts/0.5 (+https://github.com/ArcturusForge/TCG_Alerts)'
+AGENT = 'TCGAlerts/0.6 (+https://github.com/ArcturusForge/TCG_Alerts)'
 LIMIT = 4 * 1024 * 1024
 
 
@@ -27,12 +27,13 @@ class SameOrigin(request.HTTPRedirectHandler):
 
 
 class Client:
-    def __init__(self, spacing=2.0):
+    def __init__(self, spacing=2.0, browser_helper=None):
         self.opener = request.build_opener(SameOrigin(), request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
         self.robots = {}
         self.last = {}
         self.spacing = spacing
         self.cooldowns = {}
+        self.browser_helper = browser_helper
 
     def raw(self, url):
         host = parse.urlsplit(url).netloc
@@ -86,7 +87,15 @@ class Client:
                 time.sleep(min(delay, 120))
             if delay > 120:
                 raise ValueError('ROBOTS: Crawl delay too long for an interactive check.')
-        return self.raw(url)
+        try:
+            text=self.raw(url)
+        except error.HTTPError as e:
+            if e.code==403 and self.browser_helper:return self.browser_helper.solve(url)
+            raise
+        if self.browser_helper:
+            from .browser_helper import challenge
+            if challenge(text):return self.browser_helper.solve(url)
+        return text
 
 
 class APIClient(Client):

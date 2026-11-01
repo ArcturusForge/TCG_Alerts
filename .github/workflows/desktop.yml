@@ -3,6 +3,9 @@ on:
   push:
   pull_request:
   workflow_dispatch:
+concurrency:
+  group: desktop-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 permissions:
   contents: read
 jobs:
@@ -30,6 +33,12 @@ jobs:
       - name: GUI smoke test (Windows)
         if: runner.os == 'Windows'
         run: python tests/gui_smoke.py
+      - name: Official browser helper download and live render (Windows)
+        if: runner.os == 'Windows'
+        timeout-minutes: 8
+        env:
+          TCG_ALERTS_GITHUB_TOKEN: ${{ github.token }}
+        run: python scripts/check_browser_helper.py
       - name: Install packager
         run: python -m pip install pyinstaller==6.16.0
       - name: Build executable
@@ -43,7 +52,44 @@ jobs:
         run: |
           $appProcess = Start-Process -FilePath dist/TCGAlerts.exe -ArgumentList '--smoke-test' -Wait -PassThru
           if ($appProcess.ExitCode -ne 0) { throw "Packaged app failed: $($appProcess.ExitCode)" }
+      - name: Packaged browser helper check (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $helperProcess = Start-Process -FilePath dist/TCGAlerts.exe -ArgumentList '--helper-smoke-test', '.browser-helper-check' -Wait -PassThru
+          if ($helperProcess.ExitCode -ne 0) { throw "Packaged browser helper failed: $($helperProcess.ExitCode)" }
+      - name: Windows update handoff
+        if: runner.os == 'Windows'
+        run: python scripts/check_update_handoff.py
       - uses: actions/upload-artifact@v4
         with:
           name: TCGAlerts-${{ runner.os }}
           path: dist/TCGAlerts*
+  publish:
+    needs: desktop
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          path: downloads
+      - name: Package stable release assets
+        run: python scripts/package_release.py
+      - name: Publish new stable version after both desktop checks
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          version=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          if gh release view "v$version" >/dev/null 2>&1; then
+            echo "Release v$version already exists; leaving its tested assets unchanged."
+          else
+            gh release create "v$version" release-assets/* --target "$GITHUB_SHA" --title "TCG Alerts v$version" --notes-file docs/RELEASE_NOTES.md
+          fi
