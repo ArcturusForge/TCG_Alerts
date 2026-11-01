@@ -43,6 +43,13 @@ def validate_manifest(value):
         if 'store' in caps:
             hosts=value.get('hosts',[])
             if not isinstance(hosts,list) or not hosts or any(not isinstance(h,str) or not re.fullmatch(r'[a-z0-9.-]+',h) or '.' not in h for h in hosts):raise ValueError('Store plugins declare exact host names.')
+    if value.get('update'):
+        from .updates import repo_name,version
+        update=value['update']
+        if not isinstance(update,dict) or set(update)!=set(('repository','asset')):raise ValueError('Update metadata needs repository and asset.')
+        repo_name(update['repository']);version(value.get('version',''))
+        if not re.fullmatch(r'[A-Za-z0-9_.-]+\.zip',update['asset']):raise ValueError('Plugin updates use a named ZIP asset.')
+    if not isinstance(value.get('cache_seconds',86400),int) or not 0<=value.get('cache_seconds',86400)<=86400:raise ValueError('cache_seconds must be between 0 and 86400.')
     return dict(value)
 
 
@@ -74,9 +81,14 @@ class PluginRegistry:
         self.lock=threading.RLock();self.active=();self.entries=[];self.reload()
 
     def reload(self):
+        # Recover a process/power interruption between the two directory renames.
+        for backup in self.directory.glob('*.previous'):
+            target=backup.with_name(backup.name[:-len('.previous')])
+            if backup.is_dir() and not target.exists():backup.rename(target)
         entries=[];active=[];seen=set()
         enabled=self.db.setting('enabled_plugins',[])
-        for path in sorted(self.directory.glob('*/plugin.json'))[:100]:
+        paths=[p for p in self.directory.glob('*/plugin.json') if not p.parent.name.endswith(('.previous','.updating','.failed'))]
+        for path in sorted(paths)[:100]:
             record={'path':str(path),'enabled':False,'error':''}
             try:
                 if path.stat().st_size>64000:raise ValueError('Manifest exceeds 64 KB.')
@@ -93,7 +105,15 @@ class PluginRegistry:
                     for capability,method in (('catalogue','search_cards'),('store','fetch_product')):
                         if capability in m['capabilities'] and not callable(getattr(provider,method,None)):raise ValueError('Plugin is missing '+method)
                 if record['enabled']:active.append((m,provider))
-            except Exception as e:record['error']=str(e)[:350];record['enabled']=False
+            except Exception as e:
+                backup=path.parent.with_name(path.parent.name+'.previous')
+                if backup.exists():
+                    import shutil
+                    failed=path.parent.with_name(path.parent.name+'.failed')
+                    if failed.exists():shutil.rmtree(failed)
+                    path.parent.rename(failed);backup.rename(path.parent)
+                    return self.reload()
+                record['error']=str(e)[:350];record['enabled']=False
             entries.append(record)
         with self.lock:self.entries=entries;self.active=tuple(active)
 
@@ -102,6 +122,11 @@ class PluginRegistry:
         if enabled:ids.add(plugin_id)
         else:ids.discard(plugin_id)
         self.db.set_setting('enabled_plugins',sorted(ids));self.reload()
+
+    def cache_policy(self,provider_id):
+        for manifest,_ in self.active:
+            if manifest['id']==provider_id:return manifest.get('cache_seconds',86400),manifest.get('version','')
+        return 86400,'builtin'
 
     def games(self):return sorted({g for m,_ in self.active for g in m['games'] if g!='*'})
 

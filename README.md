@@ -2,7 +2,7 @@
 
 A private desktop radar for sealed TCG prices and restocks. Built for a Windows PC first, with Linux source support. No hosted server, subscription or API keys are required. Source needs Python with Tk and Pillow; Windows also uses pystray. Dependencies are included in packaged executables.
 
-**Status: working v0.5 MVP, not yet a full-store aggregation service.** It monitors exact product URLs that you choose. It does not claim coverage of 150 stores, verified merchants, physical inventory or guaranteed restock detection.
+**Status: working v0.6 MVP, not yet a full-store aggregation service.** It monitors exact product URLs that you choose. It does not claim coverage of 150 stores, verified merchants, physical inventory or guaranteed restock detection.
 
 ## Start
 
@@ -172,3 +172,12 @@ Only visible gallery tiles request images; three background image workers share 
 **Getting started (F1)** explains the first product, deck and chart. **Open backup as a separate copy** validates a SQLite backup, creates/migrates a new copy and opens it in another app window. It does not replace the active database or alter the supplied backup. **Download / check new builds** opens the repository workflow page; automatic installation is not implemented.
 
 [Validation and source sample](docs/V05_VALIDATION.md). Still pending: a Cyberpunk catalogue plugin, broader store-specific adapters, sold-price feeds, shared inventory reservations, deck budget alerts, automatic release/calendar refresh/reminders, automatic updates and game-specific legality rules.
+
+
+## v0.6 — automatic releases, helper installation, Cyberpunk lookup and deck budgets
+
+**Settings → Updates / browser helper** checks stable GitHub releases, downloads verified app updates, updates pinned providers and installs/updates FlareSolverr when a public product page needs it. Packaged Windows updates apply after closing with a launch probe and previous-executable backup; source/Linux updates are staged for explicit restart. Private repository downloads require `TCG_ALERTS_GITHUB_TOKEN` with read access. CI publishes Releases only after both desktop builds/tests pass. [Update channel, installation and recovery details](docs/UPDATES.md).
+
+**Game / store plugins → Install from GitHub** installs a named release ZIP without recompilation. The included Cyberpunk provider performs exact-name lookup using NetDeck's public embed SDK (for example `Rebecca: Having a Moment`); it does not claim fuzzy browsing, all printings or a pricing feed. Pokémon's TCGdex provider and Cyberpunk's provider pin this repo's release channel. New plugins start disabled; existing enabled providers retain their state on update.
+
+**Decks → More deck actions → Missing-card budget alert** notifies when every missing copy has a fresh confirmed linked item price and their subtotal fits the configured budget. Shipping is excluded and seller quantities remain unverified. Partial/unpriced decks cannot qualify. Alerts are retained locally, filtered by game, and do not repeat until the deck leaves then re-enters the qualifying state. Checks run while the app is open.

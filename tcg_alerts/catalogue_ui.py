@@ -39,12 +39,13 @@ class CatalogueSearch(tk.Toplevel):
         self.busy=True;self.button.configure(state='disabled');self.token+=1;token=self.token
         self.status.set('Searching catalogue… Existing results remain available.')
         cache=self.page.app.db.path.parent/'catalogue_cache';cache.mkdir(exist_ok=True)
-        path=cache/(hashlib.sha256((provider_id+':'+game+':'+query.casefold()).encode()).hexdigest()+'.json')
+        ttl,provider_version=self.page.app.plugins.cache_policy(provider_id)
+        path=cache/(hashlib.sha256((provider_id+':'+provider_version+':'+game+':'+query.casefold()).encode()).hexdigest()+'.json')
         def work():
             cached=None
             try:
                 if path.exists():cached=json.loads(path.read_text())
-                if cached is not None and time.time()-path.stat().st_mtime<86400:return cached,'Saved search · less than 24 hours old'
+                if cached is not None and time.time()-path.stat().st_mtime<ttl:return cached,'Saved search · within provider refresh window'
                 rows=self.page.app.plugins.search(provider_id,game,query);tmp=path.with_suffix('.tmp');tmp.write_text(json.dumps(rows));tmp.replace(path)
                 # Keep a bounded number of search results; images have a separate bounded cache.
                 for old in sorted(cache.glob('*.json'),key=lambda p:p.stat().st_mtime,reverse=True)[100:]:old.unlink(missing_ok=True)
