@@ -45,7 +45,7 @@ class CatalogueSearch(tk.Toplevel):
             cached=None
             try:
                 if path.exists():cached=json.loads(path.read_text())
-                if cached is not None and time.time()-path.stat().st_mtime<ttl:return cached,'Saved search · within provider refresh window'
+                if cached is not None and 0<=time.time()-path.stat().st_mtime<ttl:return cached,'Saved search · within provider refresh window'
                 rows=self.page.app.plugins.search(provider_id,game,query);tmp=path.with_suffix('.tmp');tmp.write_text(json.dumps(rows));tmp.replace(path)
                 # Keep a bounded number of search results; images have a separate bounded cache.
                 for old in sorted(cache.glob('*.json'),key=lambda p:p.stat().st_mtime,reverse=True)[100:]:old.unlink(missing_ok=True)
