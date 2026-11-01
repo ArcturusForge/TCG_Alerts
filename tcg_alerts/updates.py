@@ -237,7 +237,16 @@ try {
     if (-not $probe.WaitForExit(30000)) { $probe.Kill(); throw 'New app launch check timed out.' }
     if ($probe.ExitCode -ne 0) { throw 'New app launch check failed.' }
     Copy-Item -LiteralPath $c.target -Destination $backup -Force
-    Copy-Item -LiteralPath $c.source -Destination $c.target -Force
+    $localStage = $c.target + '.updating'
+    Copy-Item -LiteralPath $c.source -Destination $localStage -Force
+    $until = (Get-Date).AddSeconds(30)
+    while ($true) {
+        try { [System.IO.File]::Replace($localStage, $c.target, $null); break }
+        catch {
+            if ((Get-Date) -gt $until) { throw }
+            Start-Sleep -Milliseconds 300
+        }
+    }
     $swapped = $true
     if ($c.restart) { Start-Process -FilePath $c.target -ArgumentList @('--database', ('"' + $c.database + '"')) }
     'Updated successfully. Previous executable: ' + $backup | Set-Content -LiteralPath $log
