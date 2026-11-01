@@ -228,7 +228,11 @@ try {
         if ((Get-Date) -gt $until) { throw 'App did not exit; update remains staged.' }
         Start-Sleep -Milliseconds 300
     }
-    if ((Get-FileHash -LiteralPath $c.source -Algorithm SHA256).Hash.ToLower() -ne $c.sha256) { throw 'Staged executable changed.' }
+    $stream = [System.IO.File]::OpenRead($c.source)
+    $hasher = [System.Security.Cryptography.SHA256]::Create()
+    try { $digest = [System.BitConverter]::ToString($hasher.ComputeHash($stream)).Replace('-', '').ToLower() }
+    finally { $stream.Dispose(); $hasher.Dispose() }
+    if ($digest -ne $c.sha256) { throw 'Staged executable changed.' }
     $probe = Start-Process -FilePath $c.source -ArgumentList '--smoke-test' -PassThru
     if (-not $probe.WaitForExit(30000)) { $probe.Kill(); throw 'New app launch check timed out.' }
     if ($probe.ExitCode -ne 0) { throw 'New app launch check failed.' }
