@@ -242,7 +242,7 @@ try {
     Copy-Item -LiteralPath $c.source -Destination $localStage -Force
     $until = (Get-Date).AddSeconds(30)
     while ($true) {
-        try { [System.IO.File]::Replace($localStage, $c.target, $null); break }
+        try { [System.IO.File]::Replace($localStage, $c.target, [NullString]::Value); break }
         catch {
             if ((Get-Date) -gt $until) { throw }
             Start-Sleep -Milliseconds 300
