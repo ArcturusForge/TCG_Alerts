@@ -47,6 +47,7 @@ class Releases:
         except error.HTTPError as e:
             if e.code==404:raise ValueError('No visible stable release. Private repositories need TCG_ALERTS_GITHUB_TOKEN with repository read access.') from None
             raise ValueError('GitHub release check failed (HTTP '+str(e.code)+').') from None
+        if result.get('draft') or result.get('prerelease'):raise ValueError('Only published stable releases can auto-update.')
         version(result.get('tag_name'));return result
     def download(self,repo,asset,destination,limit=600*1024*1024):
         digest=asset.get('digest','') or ''
@@ -123,7 +124,7 @@ def atomic_json(path,value):
 
 class UpdateCoordinator:
     def __init__(self,app):
-        self.app=app;self.root=app.db.path.parent/'updates';self.root.mkdir(exist_ok=True);self.busy=False;self.stop=threading.Event();self.pending=None
+        self.app=app;self.root=app.db.path.parent/'updates';self.root.mkdir(exist_ok=True);self.busy=False;self.check_lock=threading.Lock();self.stop=threading.Event();self.pending=None
         self.status='Automatic checks run every six hours while the app is open.'
         try:
             from . import __version__
@@ -138,9 +139,9 @@ class UpdateCoordinator:
         threading.Thread(target=loop,daemon=True,name='release-checks').start()
     def close(self):self.stop.set()
     def check(self,app_updates=True):
-        if self.busy:return
+        if not self.check_lock.acquire(blocking=False):return
         self.busy=True
-        def worker():
+        def perform():
             messages=[]
             try:
                 from . import __version__
@@ -164,7 +165,11 @@ class UpdateCoordinator:
                     if (self.app.db.path.parent/'browser_helper'/'current.json').exists():
                         self.app.browser_helper.ensure(update=True);messages.append('Browser helper checked.')
                 except Exception as e:messages.append('Browser helper: '+str(e))
-            self.app.monitor.events.put(('update_status',' '.join(messages)));self.busy=False
+            self.app.monitor.events.put(('update_status',' '.join(messages)))
+        def worker():
+            try:perform()
+            except Exception as e:self.app.monitor.events.put(('update_status','Update check interrupted: '+str(e)))
+            finally:self.busy=False;self.check_lock.release()
         threading.Thread(target=worker,daemon=True,name='download-updates').start()
     def update_plugins(self):
         messages=[]
@@ -173,6 +178,9 @@ class UpdateCoordinator:
             if not setting or not self.app.db.setting('plugin_auto_updates',True):continue
             try:
                 repo=repo_name(setting['repository']);release=Releases().latest(repo)
+                rejected=self.app.db.setting('failed_plugin_updates',{}).get(record['id'])
+                if rejected and version(rejected)==version(release['tag_name']):
+                    messages.append(record['name']+': this version previously failed and was rolled back.');continue
                 installed=json.loads(Path(record['path']).read_text())
                 if version(release['tag_name'])<=version(installed.get('version','0.0.0')):continue
                 from .plugins import validate_manifest

@@ -59,6 +59,17 @@ class UpdateTests(unittest.TestCase):
         # Repeated checks use the installed version, not a stale loaded manifest.
         app.plugins=registry
         with patch('tcg_alerts.updates.Releases',return_value=client):self.assertEqual(coordinator.update_plugins(),[])
+    def test_failed_python_update_recovers_previous_version_and_remembers_failure(self):
+        from tcg_alerts.plugins import PluginRegistry
+        db=Database(self.root/'rollback.db');registry=PluginRegistry(self.root/'rollback_plugins',db)
+        current=registry.directory/'reader';old=registry.directory/'reader.previous';current.mkdir();old.mkdir()
+        manifest=dict(api_version=1,id='reader',name='Reader',version='1.1.0',kind='python',games=['Game'],capabilities=['catalogue'])
+        (current/'plugin.json').write_text(json.dumps(manifest));(current/'provider.py').write_text('raise RuntimeError("new plugin fails")')
+        (old/'plugin.json').write_text(json.dumps(dict(manifest,version='1.0.0')))
+        (old/'provider.py').write_text('class Provider:\n def search_cards(self,game,query,client):return []\ndef create_plugin(context):return Provider()\n')
+        db.set_setting('enabled_plugins',['reader']);registry.reload()
+        self.assertEqual(len(registry.active),1);self.assertEqual(registry.entries[0]['version'],'1.0.0');self.assertEqual(db.setting('failed_plugin_updates')['reader'],'1.1.0')
+
     def test_browser_fallback_keeps_robot_policy_and_skips_rate_limit(self):
         helper=Mock();helper.solve.return_value='<html>product</html>';client=Client(spacing=0,browser_helper=helper)
         def raw(url):

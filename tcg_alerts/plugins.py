@@ -108,6 +108,8 @@ class PluginRegistry:
             except Exception as e:
                 backup=path.parent.with_name(path.parent.name+'.previous')
                 if backup.exists():
+                    if record.get('id') and record.get('version'):
+                        rejected=self.db.setting('failed_plugin_updates',{});rejected[record['id']]=record['version'];self.db.set_setting('failed_plugin_updates',rejected)
                     import shutil
                     failed=path.parent.with_name(path.parent.name+'.failed')
                     if failed.exists():shutil.rmtree(failed)
