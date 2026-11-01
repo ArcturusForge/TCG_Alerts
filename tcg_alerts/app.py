@@ -555,6 +555,11 @@ def main():
         from pathlib import Path
         with tempfile.TemporaryDirectory() as directory:
             app = App(Database(Path(directory) / 'smoke.sqlite3'), start_monitor=False)
+            from PIL import Image
+            app.tabs.select(app.decks_page)
+            app.update_idletasks()
+            app.decks_page.art=Image.new('RGB',(40,60),'navy')
+            app.decks_page.draw_art()
             app.after(500, app.close)
             app.mainloop()
         return
