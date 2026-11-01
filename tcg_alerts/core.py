@@ -5,7 +5,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 import os
 import sqlite3
-from contextlib import contextmanager
+from contextlib import contextmanager, closing
 from datetime import datetime, timezone
 
 
@@ -162,5 +162,5 @@ class Database:
     def backup(self, destination):
         if Path(destination).resolve() == self.path.resolve():
             raise ValueError('Choose a backup path different from the active database.')
-        with self.connect() as source, sqlite3.connect(destination) as target:
+        with self.connect() as source, closing(sqlite3.connect(destination)) as target:
             source.backup(target)
