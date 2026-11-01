@@ -84,7 +84,7 @@ class DeckTests(unittest.TestCase):
         w=self.watch()
         with self.db.connect() as c:
             c.execute('DROP TABLE deck_snapshots');c.execute('DROP TABLE deck_entries');c.execute('DROP TABLE decks');c.execute('PRAGMA user_version=3')
-        db=Database(self.path);self.assertEqual(len(db.history(w)),1);self.assertEqual(len(db.stores()),6);self.assertEqual(db.rows('PRAGMA user_version')[0]['user_version'],4)
+        db=Database(self.path);self.assertEqual(len(db.history(w)),1);self.assertEqual(len(db.stores()),6);self.assertEqual(db.rows('PRAGMA user_version')[0]['user_version'],5)
         self.assertEqual(DeckStore(db).decks(),[])
     def test_invalid_identity_quantity_art_url_and_reference_date(self):
         for bad in ({'quantity':-1},{'owned':-1},{'name':''},{'image_url':'file:///tmp/private.png'},{'reference_checked':''}):

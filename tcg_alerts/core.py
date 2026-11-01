@@ -54,7 +54,7 @@ class Database:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.connect() as c:
-            if c.execute('PRAGMA user_version').fetchone()[0]>4:raise ValueError('This database requires a newer app version.')
+            if c.execute('PRAGMA user_version').fetchone()[0]>5:raise ValueError('This database requires a newer app version.')
             c.executescript('''
                 PRAGMA journal_mode=WAL;
                 CREATE TABLE IF NOT EXISTS watches (
@@ -102,6 +102,9 @@ class Database:
             migrate(c)
             from .decks import migrate as migrate_decks
             migrate_decks(c)
+            if 'image_url' not in {r['name'] for r in c.execute('PRAGMA table_info(news_items)')}:
+                c.execute("ALTER TABLE news_items ADD COLUMN image_url TEXT NOT NULL DEFAULT ''")
+            c.execute('PRAGMA user_version=5')
 
     @contextmanager
     def connect(self):
@@ -242,9 +245,9 @@ class Database:
     def save_news(self, source_id, items, due):
         with self.connect() as c:
             for item in items:
-                c.execute('''INSERT INTO news_items(source_id,url,title,published,first_seen,topic) VALUES(?,?,?,?,?,?)
-                             ON CONFLICT(url) DO UPDATE SET title=excluded.title,published=COALESCE(excluded.published,news_items.published),topic=excluded.topic''',
-                          (source_id, item['url'], item['title'], item.get('published'), now(), item.get('topic', 'News')))
+                c.execute('''INSERT INTO news_items(source_id,url,title,published,first_seen,topic,image_url) VALUES(?,?,?,?,?,?,?)
+                             ON CONFLICT(url) DO UPDATE SET title=excluded.title,published=COALESCE(excluded.published,news_items.published),topic=excluded.topic,image_url=CASE WHEN excluded.image_url<>'' THEN excluded.image_url ELSE news_items.image_url END''',
+                          (source_id, item['url'], item['title'], item.get('published'), now(), item.get('topic', 'News'), item.get('image_url','')))
             c.execute('UPDATE news_sources SET checked=?,error=NULL,next_due=? WHERE id=?', (now(), due, source_id))
 
     def fail_news(self, source_id, message, due):

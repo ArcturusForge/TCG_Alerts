@@ -3,6 +3,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import tempfile
+import time
 from tcg_alerts.core import Database, Observation
 from tcg_alerts.app import App, WatchDialog
 from tcg_alerts.panels import NewsSources
@@ -123,5 +124,30 @@ with tempfile.TemporaryDirectory() as directory:
     page.art_received(row['id'],old_token,Image.new('RGB',(180,250),'red'),None)
     assert page.art is None
     app.update()
+    # Artwork loads asynchronously from a local file, survives view toggles, and virtualizes long decks.
+    page.refresh(deck);app.tabs.select(page);app.update()
+    artwork=Path(directory)/'card.png';Image.new('RGB',(180,250),'teal').save(artwork)
+    row=page.store.report(deck)['lines'][0];page.store.local_image(row['id'],artwork)
+    page.refresh();page.table.selection_set(str(row['id']));page.select()
+    until=time.monotonic()+4
+    while page.art is None and time.monotonic()<until:
+        app.update();time.sleep(.02)
+    assert page.art is not None
+    page.view.set('Price table');page.update_gallery();app.update()
+    assert page.selected()['id']==row['id'] and page.table.winfo_ismapped()
+    page.view.set('Artwork gallery');page.update_gallery();app.update()
+    assert page.gallery.winfo_ismapped()
+    page.store.import_rows(deck,[dict(name='Long-deck fixture '+str(i),quantity=1) for i in range(100)])
+    page.refresh();app.update()
+    assert len(page.gallery.boxes)<len(page.gallery.items)
+    page.gallery.select(str(row['id']));page.gallery.move(1);app.update()
+    assert page.selected()['id']!=row['id']
+    chart=page.overview();app.update();chart.destroy()
+    guide=app.show_guide();app.update();guide.destroy()
+    from tcg_alerts.catalogue_ui import CatalogueSearch
+    catalogue=CatalogueSearch(page);catalogue.receive(catalogue.token,[], 'Fixture empty search');app.update();catalogue.close()
+    manager=app.manage_plugins();app.update();assert len(manager.table.get_children())==1;manager.destroy()
+    app.geometry('1180x700');app.update()
+    assert page.gallery.winfo_height()>80
     app.close()
 print('GUI smoke passed')

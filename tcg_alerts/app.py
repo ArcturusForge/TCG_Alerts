@@ -20,6 +20,8 @@ from .additions import Directory,Compare,Calendar,VariantPicker,delivery_editor
 from .desktop import Desktop
 from .decks_ui import DeckPage
 from .shell import CollectorShell
+from .visuals import ImageService
+from .plugins import PluginRegistry
 
 BG = '#0d1321'
 PANEL = '#151f32'
@@ -100,7 +102,9 @@ class App(tk.Tk):
     def __init__(self, db, start_monitor=True):
         super().__init__()
         self.db = db
-        self.monitor = Monitor(db)
+        self.plugins = PluginRegistry(db.path.parent / 'plugins', db)
+        self.monitor = Monitor(db, fetcher=self.plugins.fetch)
+        self.images = ImageService(db.path.parent / 'artwork_cache', self.monitor.events)
         self.news_monitor = NewsMonitor(db, self.monitor.events)
         self.desktop=Desktop(self.monitor.events)
         self._closing=False
@@ -228,6 +232,7 @@ class App(tk.Tk):
         self.empty_text = ttk.Label(self.empty_watch, text='Paste a store product link, choose a target price, and we’ll watch it for you.', style='Card.TLabel', wraplength=500, justify='center')
         self.empty_text.pack(pady=(0, 16))
         ttk.Button(self.empty_watch, text='+ Track your first product', style='Accent.TButton', command=self.add).pack()
+        ttk.Button(self.empty_watch,text='Or build a deck',command=lambda:self.tabs.select(self.decks_page)).pack(pady=(8,0))
         alerts_page = ttk.Frame(self.tabs)
         self.tabs.add(alerts_page, text='Alerts')
         self.alert_table = self.make_table(alerts_page, [('at', 'Time (local)', 170), ('kind', 'Trigger', 90), ('message', 'Alert', 800)])
@@ -259,6 +264,10 @@ class App(tk.Tk):
         ttk.Button(discovery, text='Track selected listing', command=self.track_discovery).pack(anchor='e', pady=10)
         settings = ttk.Frame(self.tabs, padding=20)
         self.tabs.add(settings, text='Settings & data')
+        getting_started=ttk.Frame(settings);getting_started.pack(fill='x',pady=(0,10))
+        ttk.Button(getting_started,text='Getting started (F1)',command=self.show_guide).pack(side='left')
+        ttk.Button(getting_started,text='Game / store plugins',command=self.manage_plugins).pack(side='left',padx=10)
+        ttk.Button(getting_started,text='Download / check new builds',command=lambda:webbrowser.open('https://github.com/ArcturusForge/TCG_Alerts/actions/workflows/desktop.yml')).pack(side='left',padx=10)
         ttk.Label(settings, text='Private by default.', style='Heading.TLabel').pack(anchor='w')
         ttk.Label(settings, text='Checks run every 15 minutes while this app is open. Sleeping or closing the PC stops checks.\nFailures back off automatically. Manual checks respect the scheduled cooldown.\nAlerts are saved here and ring the bell. Windows native tray notifications are supported; email/Telegram are not configured.\nThe app reads public Shopify product data and single-offer JSON-LD pages.\nIt respects robots.txt and does not bypass login, CAPTCHA or blocked storefronts.\n\nYour database: ' + str(self.db.path), style='Muted.TLabel', wraplength=1000).pack(anchor='w', pady=18)
         self.native_enabled=tk.BooleanVar(value=self.db.setting('native_notifications',True))
@@ -271,6 +280,7 @@ class App(tk.Tk):
         ttk.Label(settings,textvariable=self.native_status,style='Muted.TLabel',wraplength=1050).pack(anchor='w',pady=4)
         ttk.Button(settings, text='Export watchlist CSV', command=self.export).pack(anchor='w', pady=6)
         ttk.Button(settings, text='Back up complete database', command=self.backup).pack(anchor='w', pady=6)
+        ttk.Button(settings, text='Open backup as a separate copy…', command=self.open_backup).pack(anchor='w', pady=6)
         ttk.Label(outer, textvariable=self.status, style='Muted.TLabel').pack(side='bottom',anchor='w', pady=(12, 0))
         self.tabs.pack_forget()
         self.tabs.pack(fill='both',expand=True)
@@ -278,6 +288,19 @@ class App(tk.Tk):
         self.shell.changed()
         self.bind('<Control-1>', lambda e: self.tabs.select(self.watch_page))
         self.bind('<Control-f>', self.focus_search)
+        self.bind('<F1>',lambda e:self.show_guide())
+
+    def manage_plugins(self):
+        from .plugins_ui import PluginManager
+        return PluginManager(self)
+
+    def show_guide(self):
+        from .onboarding import guide
+        return guide(self)
+
+    def open_backup(self):
+        from .onboarding import open_backup
+        return open_backup(self)
 
     def focus_search(self, event=None):
         self.tabs.select(self.watch_page)
@@ -371,7 +394,7 @@ class App(tk.Tk):
         selected = self.table.selection() if hasattr(self, 'table') else ()
         all_watches = self.db.watches()
         for key, all_value, defaults in (('game', 'All games', GAMES), ('country', 'All countries', COUNTRIES), ('state', 'All states', AU_STATES)):
-            extra_games=[d['game'] for d in self.decks_page.store.decks()] if key=='game' else []
+            extra_games=[d['game'] for d in self.decks_page.store.decks()]+self.plugins.games() if key=='game' else []
             self.tag_boxes[key].configure(values=[all_value, *dict.fromkeys([*defaults, *extra_games, *(w[key] for w in all_watches)])])
         watches = self.scope()
         self.rows = {str(w['id']): w for w in watches}
@@ -513,7 +536,7 @@ class App(tk.Tk):
         if path:
             try:
                 self.db.backup(path)
-                self.status.set('Database backup saved. Restore with: python run.py --database PATH')
+                self.status.set('Database backup saved. Use Settings → Open backup as a separate copy to inspect or restore it.')
             except (OSError, sqlite3.Error, ValueError) as e:
                 messagebox.showerror('Backup failed', str(e), parent=self)
 
@@ -527,6 +550,11 @@ class App(tk.Tk):
                     if self.native_enabled.get():self.desktop.notify(payload)
                     self.status.set('ALERT • ' + payload)
                     changed = True
+                elif kind == 'visual_image':
+                    self.images.receive(*payload)
+                elif kind == 'catalogue_result':
+                    dialog,token,rows,status=payload
+                    if dialog.winfo_exists():dialog.receive(token,rows,status)
                 elif kind == 'deck_art':
                     self.decks_page.art_received(*payload)
                 elif kind == 'variant_options':
@@ -582,6 +610,7 @@ class App(tk.Tk):
     def close(self):
         if self._closing:return
         self._closing=True
+        self.images.close()
         self.desktop.stop()
         self.monitor.close()
         self.news_monitor.close()
