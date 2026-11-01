@@ -15,11 +15,15 @@ with tempfile.TemporaryDirectory() as directory:
     db = Database(Path(directory) / 'test.sqlite3')
     app = App(db, start_monitor=False)
     app.update()
+    assert app.empty_watch.winfo_ismapped()
+    assert all(str(b.cget('state'))=='disabled' for b in app.watch_actions)
     first = db.add('https://example.com/products/box', label='Riftbound box', group_name='English box', target=23000,game='Riftbound',country='Australia',state='Victoria')
     db.record(first, Observation('Riftbound box', 22000, 'AUD', 'in_stock', 'fixture'))
     app.refresh()
     app.table.selection_set(str(first))
     app.selection()
+    assert all(str(b.cget('state'))=='normal' for b in app.watch_actions)
+    assert not app.empty_watch.winfo_ismapped()
     app.show_history()
     dialog = WatchDialog(app, db, app.refresh, db.watches()[0])
     app.update()
@@ -27,6 +31,14 @@ with tempfile.TemporaryDirectory() as directory:
     for tab in app.tabs.tabs():
         app.tabs.select(tab)
         app.update()
+    app.tabs.select(app.decks_page);app.update()
+    assert app.shell.index == 3
+    app.shell.buttons[0].invoke();app.update()
+    assert app.tabs.select() == str(app.watch_page)
+    app.focus_search();app.update()
+    app.geometry('1180x700');app.update()
+    for button in app.watch_actions:
+        assert button.winfo_rooty()+button.winfo_height() <= app.winfo_rooty()+app.winfo_height()
     assert len(app.table.get_children()) == 1
     assert len(app.compare_table.get_children()) == 1
     assert len(app.alert_table.get_children()) == 1

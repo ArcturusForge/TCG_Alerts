@@ -19,6 +19,7 @@ from .panels import NewsPage, AnalyticsPage
 from .additions import Directory,Compare,Calendar,VariantPicker,delivery_editor
 from .desktop import Desktop
 from .decks_ui import DeckPage
+from .shell import CollectorShell
 
 BG = '#0d1321'
 PANEL = '#151f32'
@@ -104,8 +105,8 @@ class App(tk.Tk):
         self.desktop=Desktop(self.monitor.events)
         self._closing=False
         self.title('TCG Alerts • sealed product radar')
-        self.geometry('1360x900')
-        self.minsize(1100, 760)
+        self.geometry(f'{min(1500, max(1180, self.winfo_screenwidth()-60))}x{min(940, max(700, self.winfo_screenheight()-80))}')
+        self.minsize(1180, 700)
         self.configure(bg=BG)
         self.style_ui()
         self.rows = {}
@@ -128,7 +129,7 @@ class App(tk.Tk):
 
     def style_ui(self):
         families = set(tkfont.families(self))
-        self.font_family = next((f for f in ('Segoe UI', 'DejaVu Sans', 'Liberation Sans', 'Arial') if f in families), tkfont.nametofont('TkDefaultFont').actual('family'))
+        self.font_family = next((f for f in ('Segoe UI', 'DejaVu Sans', 'Liberation Sans', 'Arial', 'Helvetica', 'helvetica') if f in families), tkfont.nametofont('TkDefaultFont').actual('family'))
         s = ttk.Style(self)
         s.theme_use('clam')
         s.configure('.', background=BG, foreground=TEXT, font=(self.font_family, 10))
@@ -146,6 +147,11 @@ class App(tk.Tk):
         s.configure('TCombobox', fieldbackground=PANEL, foreground=TEXT, arrowcolor=ACCENT, padding=7)
         s.map('TCombobox', fieldbackground=[('readonly', PANEL)], foreground=[('readonly', TEXT)])
         s.configure('TNotebook', background=BG, borderwidth=0)
+        s.layout('Desk.TNotebook.Tab', [])
+        s.configure('Desk.TNotebook', background=BG, borderwidth=0)
+        s.configure('Card.TFrame', background='#1b2c3c')
+        s.configure('Card.TLabel', background='#1b2c3c', foreground=MUTED)
+        s.configure('CardMetric.TLabel', background='#1b2c3c', foreground='#d5e5c8', font=(self.font_family, 22, 'bold'))
         s.configure('TNotebook.Tab', background=PANEL, foreground=MUTED, padding=(20, 12))
         s.map('TNotebook.Tab', background=[('selected', '#24364d')], foreground=[('selected', ACCENT)])
         s.configure('Treeview', background=PANEL, fieldbackground=PANEL, foreground=TEXT, rowheight=42, borderwidth=0)
@@ -154,59 +160,74 @@ class App(tk.Tk):
         s.configure('TCheckbutton', background=BG, foreground=TEXT)
 
     def build(self):
-        outer = ttk.Frame(self, padding=26)
-        outer.pack(fill='both', expand=True)
-        header = ttk.Frame(outer)
-        header.pack(fill='x')
-        ttk.Label(header, text='TCG / ALERTS', style='Heading.TLabel').pack(side='left')
-        ttk.Label(header, text='LOCAL DESKTOP  •  v0.4', style='Muted.TLabel').pack(side='right')
-        ttk.Label(outer, text='Your sealed product radar.', style='Title.TLabel').pack(anchor='w', pady=(24, 6))
-        ttk.Label(outer, text='Track the exact product. See the evidence. Catch your price.', style='Muted.TLabel').pack(anchor='w')
-        metrics = ttk.Frame(outer)
-        metrics.pack(fill='x', pady=20)
-        self.metrics = []
-        for name in ('WATCHING', 'IN STOCK', 'AT TARGET', 'NEEDS ATTENTION'):
-            cell = ttk.Frame(metrics, padding=(0, 0, 48, 0))
-            cell.pack(side='left')
-            value = ttk.Label(cell, text='0', style='Metric.TLabel')
-            value.pack(anchor='w')
-            ttk.Label(cell, text=name, style='Muted.TLabel').pack(anchor='w')
-            self.metrics.append(value)
-        tools = ttk.Frame(outer)
-        tools.pack(fill='x', pady=(0, 18))
-        ttk.Entry(tools, textvariable=self.search, width=32).pack(side='left', padx=(0, 10))
-        picker = ttk.Combobox(tools, textvariable=self.filter, values=['All watches', 'In stock', 'At target', 'Needs attention', 'Paused'], state='readonly', width=18)
-        picker.pack(side='left')
-        picker.bind('<<ComboboxSelected>>', lambda e: self.refresh())
-        ttk.Button(tools, text='+ Track product', style='Accent.TButton', command=self.add).pack(side='right')
-        ttk.Button(tools, text='Check due now', command=self.monitor.check_now).pack(side='right', padx=10)
+        self.shell = CollectorShell(self)
+        outer = self.shell.main
         regions = ttk.Frame(outer)
-        regions.pack(fill='x', pady=(0, 12))
+        regions.pack(fill='x', pady=(0, 16))
         self.tag_boxes = {}
         for label, key, var, values in (
             ('Game', 'game', self.game_filter, ['All games', *GAMES]),
             ('Store country', 'country', self.country_filter, ['All countries', *COUNTRIES]),
-            ('Store state / region', 'state', self.state_filter, ['All states', *AU_STATES, 'Unspecified'])):
-            ttk.Label(regions, text=label, style='Muted.TLabel').pack(side='left', padx=(0, 6))
-            box = ttk.Combobox(regions, textvariable=var, values=values, state='readonly', width=21)
-            box.pack(side='left', padx=(0, 14))
+            ('State / region', 'state', self.state_filter, ['All states', *AU_STATES, 'Unspecified'])):
+            cell = ttk.Frame(regions)
+            cell.pack(side='left', fill='x', expand=True, padx=(0, 14))
+            ttk.Label(cell, text=label, style='Muted.TLabel').pack(anchor='w', pady=(0, 5))
+            box = ttk.Combobox(cell, textvariable=var, values=values, state='readonly', width=19)
+            box.pack(fill='x')
             box.bind('<<ComboboxSelected>>', lambda e, k=key: self.tags_changed(k))
             self.tag_boxes[key] = box
-        ttk.Button(regions, text='Reset filters', command=self.reset_filters).pack(side='right')
-        self.tabs = ttk.Notebook(outer)
+        ttk.Button(regions, text='Clear filters', command=self.reset_filters).pack(side='right', anchor='s')
+        self.tabs = ttk.Notebook(outer, style='Desk.TNotebook', takefocus=False)
         self.tabs.pack(fill='both', expand=True)
         watch_page = ttk.Frame(self.tabs)
         self.tabs.add(watch_page, text='Watchlist')
+        self.watch_page = watch_page
+        metrics = ttk.Frame(watch_page)
+        metrics.pack(fill='x', pady=(0, 16))
+        self.metrics = []
+        for i, name in enumerate(('Watching', 'In stock', 'At your target', 'Needs attention')):
+            metrics.columnconfigure(i, weight=1, uniform='metric')
+            cell = ttk.Frame(metrics, padding=(16, 10), style='Card.TFrame')
+            cell.grid(row=0, column=i, sticky='ew', padx=(0, 10 if i<3 else 0))
+            value = ttk.Label(cell, text='0', style='CardMetric.TLabel')
+            value.pack(anchor='w')
+            ttk.Label(cell, text=name, style='Card.TLabel').pack(anchor='w')
+            self.metrics.append(value)
+        tools = ttk.Frame(watch_page)
+        tools.pack(fill='x', pady=(0, 14))
+        search = ttk.Frame(tools)
+        search.pack(side='left', fill='x', expand=True, padx=(0, 12))
+        ttk.Label(search, text='Search your watchlist', style='Muted.TLabel').pack(anchor='w', pady=(0, 5))
+        ttk.Entry(search, textvariable=self.search, width=25).pack(fill='x')
+        mode = ttk.Frame(tools)
+        mode.pack(side='left', padx=(0, 12))
+        ttk.Label(mode, text='Show', style='Muted.TLabel').pack(anchor='w', pady=(0, 5))
+        picker = ttk.Combobox(mode, textvariable=self.filter, values=['All watches', 'In stock', 'At target', 'Needs attention', 'Paused'], state='readonly', width=18)
+        picker.pack()
+        picker.bind('<<ComboboxSelected>>', lambda e: self.refresh())
+        ttk.Button(tools, text='+ Track a product', style='Accent.TButton', command=self.add).pack(side='right', anchor='s')
+        ttk.Button(tools, text='Check prices', command=self.monitor.check_now).pack(side='right', anchor='s', padx=(0, 10))
         self.table = self.make_table(watch_page, [('product', 'Product / group', 300), ('store', 'Store', 165), ('price', 'Item price', 100),
                                                ('stock', 'Availability', 110), ('target', 'Target', 90), ('check', 'Last success / health', 220)])
         self.table.bind('<<TreeviewSelect>>', lambda e: self.selection())
         self.table.bind('<Double-1>', lambda e: self.open_store())
         actions = ttk.Frame(watch_page)
-        actions.pack(fill='x', pady=10)
+        actions.pack(side='bottom', fill='x', pady=10)
+        self.watch_actions = []
         for text, command in [('Open store ↗', self.open_store), ('Edit', self.edit), ('Delivery & units',self.edit_delivery), ('Pause / resume', self.toggle), ('History', self.show_history), ('Remove', self.remove)]:
-            ttk.Button(actions, text=text, command=command).pack(side='left', padx=(0, 8))
+            button = ttk.Button(actions, text=text, command=command, state='disabled')
+            button.pack(side='left', padx=(0, 8))
+            self.watch_actions.append(button)
         self.detail = tk.StringVar(value='Add a product URL to start. No sample prices are shown as live data.')
-        ttk.Label(watch_page, textvariable=self.detail, style='Muted.TLabel', wraplength=1120).pack(anchor='w', pady=8)
+        ttk.Label(watch_page, textvariable=self.detail, style='Muted.TLabel', wraplength=1000).pack(side='bottom', anchor='w', pady=8)
+        self.table.master.pack_forget()
+        self.table.master.pack(fill='both', expand=True)
+        self.empty_watch = ttk.Frame(self.table, padding=25, style='Card.TFrame')
+        self.empty_title = ttk.Label(self.empty_watch, text='Your next find starts here', style='CardMetric.TLabel')
+        self.empty_title.pack(pady=(0, 10))
+        self.empty_text = ttk.Label(self.empty_watch, text='Paste a store product link, choose a target price, and we’ll watch it for you.', style='Card.TLabel', wraplength=500, justify='center')
+        self.empty_text.pack(pady=(0, 16))
+        ttk.Button(self.empty_watch, text='+ Track your first product', style='Accent.TButton', command=self.add).pack()
         alerts_page = ttk.Frame(self.tabs)
         self.tabs.add(alerts_page, text='Alerts')
         self.alert_table = self.make_table(alerts_page, [('at', 'Time (local)', 170), ('kind', 'Trigger', 90), ('message', 'Alert', 800)])
@@ -253,6 +274,21 @@ class App(tk.Tk):
         ttk.Label(outer, textvariable=self.status, style='Muted.TLabel').pack(side='bottom',anchor='w', pady=(12, 0))
         self.tabs.pack_forget()
         self.tabs.pack(fill='both',expand=True)
+        self.tabs.bind('<<NotebookTabChanged>>', self.shell.changed)
+        self.shell.changed()
+        self.bind('<Control-1>', lambda e: self.tabs.select(self.watch_page))
+        self.bind('<Control-f>', self.focus_search)
+
+    def focus_search(self, event=None):
+        self.tabs.select(self.watch_page)
+        def focus(widget):
+            if isinstance(widget, ttk.Entry) and str(widget.cget('textvariable')) == str(self.search):
+                widget.focus_set()
+                widget.selection_range(0, 'end')
+            for child in widget.winfo_children():
+                focus(child)
+        focus(self.watch_page)
+        return 'break'
 
     def start_discovery(self):
         from .sources import Client, discover
@@ -306,7 +342,9 @@ class App(tk.Tk):
             table.heading(key, text=label)
             table.column(key, width=width, minwidth=60, stretch=True)
         scroll = ttk.Scrollbar(wrap, orient='vertical', command=table.yview)
-        table.configure(yscrollcommand=scroll.set)
+        horizontal = ttk.Scrollbar(wrap, orient='horizontal', command=table.xview)
+        horizontal.pack(side='bottom', fill='x')
+        table.configure(yscrollcommand=scroll.set, xscrollcommand=horizontal.set)
         table.pack(side='left', fill='both', expand=True)
         scroll.pack(side='right', fill='y')
         return table
@@ -365,6 +403,12 @@ class App(tk.Tk):
         for item in selected:
             if self.table.exists(item):
                 self.table.selection_set(item)
+        if self.table.get_children():
+            self.empty_watch.place_forget()
+        else:
+            self.empty_title.configure(text='Your next find starts here' if not all_watches else 'No matching products')
+            self.empty_text.configure(text='Paste a store product link, choose a target price, and we’ll watch it for you.' if not all_watches else 'Try another search or clear the game and region filters.')
+            self.empty_watch.place(relx=.5, rely=.5, anchor='center')
         self.alert_table.delete(*self.alert_table.get_children())
         for a in self.db.alerts():
             if str(a['watch_id']) not in self.rows:
@@ -384,6 +428,10 @@ class App(tk.Tk):
 
     def selection(self):
         w = self.selected()
+        for button in self.watch_actions:
+            button.configure(state='normal' if w else 'disabled')
+        if not w:
+            self.detail.set('Select a product to see its source, delivery details, and latest check.')
         if w:
             self.detail.set(w['game'] + ' • Store: ' + w['country'] + ' / ' + w['state'] + ' • ' + w['url'] + '\n' + (w['error'] or f"Source: {w['source'] or 'pending'} • Shipping: {self.cash(w['shipping']) if w['shipping'] is not None else 'unknown'} • Last attempt: {self.local(w['attempted'])}"))
 

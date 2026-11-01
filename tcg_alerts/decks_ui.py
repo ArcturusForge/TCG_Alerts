@@ -90,6 +90,15 @@ class DeckPage(ttk.Frame):
         controls=ttk.Frame(self);controls.pack(fill='x',pady=(0,8))
         actions=[('New deck',lambda:self.edit_deck(False)),('Edit deck',lambda:self.edit_deck(True)),('Copy deck',self.copy),('Delete deck',self.delete),('Import text',self.import_text),('Import CSV',self.import_csv),('Add card',self.add),('Edit card',self.edit),('Remove row',self.remove),('Export CSV',self.export),('Save price snapshot',self.snapshot),('Snapshot history',self.history)]
         for i,(title,action) in enumerate(actions):ttk.Button(controls,text=title,command=action).grid(row=i//6,column=i%6,sticky='w',padx=(0,6),pady=3)
+        def arrange(event):
+            buttons=controls.winfo_children();x=0;row=0;column=0
+            for button in buttons:
+                needed=button.winfo_reqwidth()+6
+                if column and (x+needed>event.width or column==6):
+                    row+=1;column=0;x=0
+                button.grid_configure(row=row,column=column)
+                x+=needed;column+=1
+        controls.bind('<Configure>',arrange)
         self.summary=tk.StringVar(value='Create a deck or import a list to start.');ttk.Label(self,textvariable=self.summary,style='Muted.TLabel',wraplength=1250).pack(anchor='w',pady=6)
         body=ttk.Frame(self);body.pack(fill='both',expand=True)
         listing=ttk.Frame(body);listing.pack(side='left',fill='both',expand=True)

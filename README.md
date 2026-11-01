@@ -26,10 +26,10 @@ The result is `dist/TCGAlerts.exe`. Build on the target operating system; a Linu
 
 ## Use
 
-1. Choose **Track product** and paste an exact HTTPS product URL. For Shopify pages with multiple options, select the desired option in the shop and copy its `?variant=...` URL. Ambiguous variants are rejected with the available IDs in the error detail.
+1. Choose **Track a product** and paste an exact HTTPS product URL. For Shopify pages with multiple options, select the desired option in the shop and copy its `?variant=...` URL. Ambiguous variants are rejected with the available IDs in the error detail.
 2. Add a target price and optionally a shipping amount. Targets are in the listing's reported currency. A blank shipping amount means unknown; `0` means free. A target includes shipping only when that amount is supplied.
-3. Leave the app open. New watches are checked automatically; each successful listing is scheduled again in 15 minutes, with up to 30 seconds of jitter. **Check due now** wakes the worker but does not bypass cooldowns. Failed checks back off exponentially up to 24 hours.
-4. Read alerts in the Alerts tab. The app rings its bell when an alert occurs; native Windows tray notifications are available. Closing exits by default; optional close-to-tray continues while the PC is awake. A sleeping PC cannot collect observations.
+3. Leave the app open. New watches are checked automatically; each successful listing is scheduled again in 15 minutes, with up to 30 seconds of jitter. **Check prices** wakes the worker but does not bypass cooldowns. Failed checks back off exponentially up to 24 hours.
+4. Read alerts in Alerts in the left menu. The app rings its bell when an alert occurs; native Windows tray notifications are available. Closing exits by default; optional close-to-tray continues while the PC is awake. A sleeping PC cannot collect observations.
 5. Compare stores by assigning identical products the same comparison group. Match language, set, edition, product type and quantity yourself. The table separates currencies, excludes failed/stale/paused listings, and leaves unknown delivered costs blank. It does not automatically normalize product names.
 
 The **Discover** tab reads one collection page and extracts same-store Shopify-style product links. Only Packs' Riftbound collection is prefilled as a convenient starting URL, not an endorsement. Select a result to create a watch. This is not exhaustive catalog discovery: pagination and JavaScript-only listings are not followed.
@@ -150,3 +150,10 @@ Set an HTTPS image URL in Edit card and choose **Load artwork**, or choose a loc
 Import/export card-row CSV with names, quantities, ownership, identity notes, manual reference amounts/currency/source dates and image URLs. CSV import appends atomically: an invalid row prevents partial insertion. Watch links are exported as URLs for reference but are not automatically trusted/recreated on import; confirm them in Edit card. Local file paths are never imported/exported. Formula-looking text is escaped for spreadsheet safety.
 
 Use **Save price snapshot** to record the current subtotals, copy coverage and the exact row/price evidence used. **Snapshot history** shows the latest 500 saved values and lets you inspect their evidence. Its chart uses the current deck currency and omits snapshots with no priced copies. These are explicit saved estimates, not an invented continuous market-price history; composition, ownership and reference choices may change between snapshots. Decks, rows and snapshots are included in the normal SQLite backup. Removing a deck row/deck does not delete its store watches; deleting a watch keeps its deck rows and any manual references intact.
+
+
+## Collector’s desk interface
+
+The illustrated banner, paper-strip accents and selected navigation row take inspiration from game menus. A persistent left menu groups collection tools, exploration and preferences. The current page has its own title and short explanation; watchlist search, counts and price-check controls stay with the watchlist. Game and store-region filters remain visible across pages (each page retains its documented filter scope).
+
+Empty watchlists explain the first step; filtered empty results suggest clearing filters. Actions needing a selected watch are disabled until a row is selected. Tables support horizontal scrolling; deck actions wrap to the available width. Initial window size fits the display, with a supported minimum of 1180 × 700. Use Tab and Space to navigate controls, Ctrl+1 for the watchlist, and Ctrl+F for watchlist search. Native fonts depend on the operating system.
