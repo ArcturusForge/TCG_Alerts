@@ -8,7 +8,7 @@ from html.parser import HTMLParser
 from urllib import request, parse, robotparser, error
 from .core import Observation, money
 
-AGENT = 'TCGAlerts/0.4 (+personal desktop price monitor)'
+AGENT = 'TCGAlerts/0.5 (+https://github.com/ArcturusForge/TCG_Alerts)'
 LIMIT = 4 * 1024 * 1024
 
 
@@ -87,6 +87,12 @@ class Client:
             if delay > 120:
                 raise ValueError('ROBOTS: Crawl delay too long for an interactive check.')
         return self.raw(url)
+
+
+class APIClient(Client):
+    """Documented machine APIs use their API contract rather than HTML crawler rules."""
+    def get(self,url):
+        return self.raw(validate_url(url))
 
 
 class StructuredData(HTMLParser):

@@ -4,6 +4,7 @@ from email.utils import parsedate_to_datetime
 from html.parser import HTMLParser
 from urllib.parse import urljoin, urlsplit
 import re
+import json
 import threading
 import time
 import xml.etree.ElementTree as ET
@@ -35,8 +36,13 @@ def topic(title):
     return 'News'
 
 
-def item(title, url, date=None):
-    return {'title': ' '.join(title.split())[:400], 'url': validate_url(url), 'published': published(date), 'topic': topic(title)}
+def artwork_url(value,base):
+    try:return validate_url(urljoin(base,value)) if value else ''
+    except (ValueError,TypeError):return ''
+
+
+def item(title, url, date=None, image_url=''):
+    return {'title': ' '.join(title.split())[:400], 'url': validate_url(url), 'published': published(date), 'topic': topic(title), 'image_url':artwork_url(image_url,url)}
 
 
 class PublisherPage(HTMLParser):
@@ -54,8 +60,10 @@ class PublisherPage(HTMLParser):
             p = urlsplit(url)
             pattern = r'^/en-us/news/[^/]+/[^/]+/?$' if self.source['adapter'] == 'riftbound' else r'^/blog/[^/]+/?$'
             if p.scheme == 'https' and p.netloc == urlsplit(self.source['url']).netloc and re.match(pattern, p.path):
-                self.current = {'url': url.split('#')[0], 'title': [], 'all': [], 'date': None, 'fallback': attrs.get('aria-label', '')}
+                self.current = {'url': url.split('#')[0], 'title': [], 'all': [], 'date': None, 'fallback': attrs.get('aria-label', ''), 'image_url':''}
         if self.current:
+            if tag=='img' and not self.current['image_url']:
+                self.current['image_url']=artwork_url(attrs.get('src') or attrs.get('data-src',''),self.source['url'])
             if tag in ('h2', 'h3') or attrs.get('data-testid') == 'card-title':
                 self.heading_tag = tag
             if tag == 'time':
@@ -84,7 +92,7 @@ class PublisherPage(HTMLParser):
                     except ValueError:
                         pass
             if title:
-                self.items[c['url']] = item(title, c['url'], date)
+                self.items[c['url']] = item(title, c['url'], date,c['image_url'])
             self.current = None
             self.heading_tag = None
 
@@ -101,16 +109,19 @@ def feed_items(text, source):
             continue
         fields = {}
         url = None
+        image_url=''
         for child in entry:
             tag = child.tag.rsplit('}', 1)[-1]
             fields[tag] = ''.join(child.itertext()).strip()
+            if tag in ('thumbnail','content','enclosure') and child.get('url') and (tag=='thumbnail' or child.get('type','').startswith('image/') or child.get('medium')=='image'):
+                image_url=artwork_url(child.get('url'),source['url'])
             if tag == 'link' and child.get('rel', 'alternate') == 'alternate':
                 url = child.get('href') or fields[tag]
         title = fields.get('title')
         if not title or not url:
             continue
         try:
-            result = item(title, urljoin(source['url'], url), fields.get('published') or fields.get('pubDate') or fields.get('date') or fields.get('updated'))
+            result = item(title, urljoin(source['url'], url), fields.get('published') or fields.get('pubDate') or fields.get('date') or fields.get('updated'),image_url)
         except ValueError:
             continue
         previous = results.get(result['url'])
@@ -122,12 +133,44 @@ def feed_items(text, source):
     return list(results.values())
 
 
+class EmbeddedJSON(HTMLParser):
+    def __init__(self):
+        super().__init__();self.capture=False;self.parts=[];self.documents=[]
+    def handle_starttag(self,tag,attrs):
+        if tag=='script' and dict(attrs).get('type')=='application/json':self.capture=True;self.parts=[]
+    def handle_data(self,data):
+        if self.capture:self.parts.append(data)
+    def handle_endtag(self,tag):
+        if tag=='script' and self.capture:
+            self.capture=False
+            try:self.documents.append(json.loads(''.join(self.parts)))
+            except (ValueError,RecursionError):pass
+
+
+def attach_publisher_images(text,items,source):
+    parser=EmbeddedJSON();parser.feed(text);stack=list(parser.documents);count=0
+    while stack and count<50000:
+        node=stack.pop();count+=1
+        if isinstance(node,list):stack.extend(node)
+        elif isinstance(node,dict):
+            action=node.get('action') or {}
+            payload=action.get('payload',{}) if isinstance(action,dict) else {}
+            url=artwork_url(payload.get('url'),source['url']) if isinstance(payload,dict) else ''
+            if url in items:
+                media=node.get('imageMedia') or node.get('media') or {}
+                if isinstance(media,dict):
+                    image=artwork_url(media.get('url'),source['url'])
+                    if image:items[url]['image_url']=image
+            stack.extend(v for v in node.values() if isinstance(v,(dict,list)))
+
+
 def fetch_news(source, client):
     text = client.get(source['url'])
     if source['adapter'] == 'feed':
         return feed_items(text, source)
     parser = PublisherPage(source)
     parser.feed(text)
+    attach_publisher_images(text,parser.items,source)
     if not parser.items:
         raise ValueError('NEWS: Publisher page returned no recognizable headlines; cached items retained.')
     return list(parser.items.values())[:100]

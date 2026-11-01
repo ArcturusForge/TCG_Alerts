@@ -6,6 +6,7 @@ import sqlite3
 import webbrowser
 from .catalog import GAMES
 from .analytics import report, timestamp
+from .visuals import VisualGrid
 
 PANEL, TEXT, MUTED, ACCENT, RED = '#151f32', '#e9effa', '#95a8c8', '#6ce3b4', '#f0949b'
 
@@ -77,11 +78,16 @@ class NewsPage(ttk.Frame):
         picker.bind('<<ComboboxSelected>>', lambda e: self.refresh())
         ttk.Button(controls, text='Refresh due sources', command=app.news_monitor.refresh).pack(side='right')
         ttk.Button(controls, text='Manage sources / add RSS', command=lambda: NewsSources(app)).pack(side='right', padx=10)
-        self.table = app.make_table(self, [('date', 'Published', 100), ('game', 'Game', 100), ('title', 'Headline', 500), ('source', 'Publisher / source', 180), ('topic', 'Topic tag', 170)])
+        self.view=tk.StringVar(value=app.db.setting('news_view','Story tiles'))
+        view=ttk.Combobox(controls,textvariable=self.view,values=('Story tiles','Headline table'),state='readonly',width=17);view.pack(side='left',padx=8);view.bind('<<ComboboxSelected>>',lambda e:self.refresh())
+        self.body=ttk.Frame(self);self.body.pack(fill='both',expand=True)
+        self.grid=VisualGrid(self.body,app,self.grid_select,lambda key:self.open(),landscape=True)
+        self.table = app.make_table(self.body, [('date', 'Published', 100), ('game', 'Game', 100), ('title', 'Headline', 500), ('source', 'Publisher / source', 180), ('topic', 'Topic tag', 170)])
         self.table.bind('<<TreeviewSelect>>', lambda e: self.select())
         self.table.bind('<Double-1>', lambda e: self.open())
         bottom = ttk.Frame(self)
-        bottom.pack(fill='x', pady=8)
+        bottom.pack(side='bottom',fill='x', pady=8)
+        self.body.pack_forget();self.body.pack(fill='both',expand=True)
         ttk.Button(bottom, text='Open original story ↗', command=self.open).pack(side='right')
         self.detail = tk.StringVar(value='News is cached locally. First refresh runs while the app is open.')
         ttk.Label(bottom, textvariable=self.detail, style='Muted.TLabel', wraplength=850).pack(side='left', anchor='w')
@@ -102,14 +108,24 @@ class NewsPage(ttk.Frame):
         for key in selected:
             if self.table.exists(key):
                 self.table.selection_set(key)
+        tiles=[dict(id=n['id'],title=n['title'],image_url=n.get('image_url',''),subtitle=f"{n['source_name']} · {n['published'][:10] if n['published'] else 'Date not reported'}\n{n['topic']}",fallback=n['game'].upper()) for n in self.rows.values()]
+        self.grid.message='No headlines yet. Refresh due sources, add a feed, or clear your game/topic filter.'
+        self.grid.set_items(tiles)
+        if self.view.get()=='Story tiles':self.table.master.pack_forget();self.grid.pack(fill='both',expand=True)
+        else:self.grid.pack_forget();self.table.master.pack(fill='both',expand=True)
+        self.app.db.set_setting('news_view',self.view.get())
         sources = self.app.db.news_sources()
         failures = sum(bool(s['error']) for s in sources if s['enabled'])
         self.detail.set(f'{len(self.rows)} cached headlines • {failures} source errors. Check source health in Manage sources. Topic tags use headline keywords.')
+
+    def grid_select(self,key):
+        if self.table.exists(key):self.table.selection_set(key);self.select()
 
     def select(self):
         selection = self.table.selection()
         if selection:
             n = self.rows[selection[0]]
+            self.grid.selected=selection[0];self.grid.schedule()
             health = n['error'] or ('last refreshed ' + self.app.local(n['checked']))
             self.detail.set(n['url'] + '\n' + health + ' • publication date shown; release details remain in the original story')
 
@@ -141,6 +157,13 @@ class AnalyticsPage(ttk.Frame):
         for picker in (self.metric_box, self.period_box, self.watch_box):
             picker.bind('<<ComboboxSelected>>', lambda e: self.refresh())
         ttk.Button(controls, text='Inspect plotted data', command=self.evidence).pack(side='right')
+        cards=ttk.Frame(self);cards.pack(fill='x',pady=8)
+        self.stat_values=[]
+        for i,label in enumerate(('Listings in scope','Successful checks','Local store-link opens')):
+            cards.columnconfigure(i,weight=1,uniform='stats')
+            cell=ttk.Frame(cards,padding=10,style='Card.TFrame');cell.grid(row=0,column=i,sticky='ew',padx=(0,8))
+            value=ttk.Label(cell,text='—',style='CardMetric.TLabel');value.pack(anchor='w');self.stat_values.append(value)
+            ttk.Label(cell,text=label,style='Card.TLabel').pack(anchor='w')
         self.summary = tk.StringVar()
         ttk.Label(self, textvariable=self.summary, style='Muted.TLabel', wraplength=1100).pack(anchor='w', pady=8)
         self.canvas = tk.Canvas(self, background=PANEL, highlightthickness=0, height=220)
@@ -166,6 +189,7 @@ class AnalyticsPage(ttk.Frame):
         attempts = sum(d['check_ok'] + d['check_failed'] for d in self.data['daily'])
         ok = sum(d['check_ok'] for d in self.data['daily'])
         opens = sum(d['store_open'] for d in self.data['daily'])
+        for label,value in zip(self.stat_values,(str(len(watches)),f'{ok}/{attempts}',str(opens))):label.configure(text=value)
         reliability = f'{ok / attempts:.1%}' if attempts else 'no checks yet'
         text = f'{len(watches)} scoped listings • check success {ok}/{attempts} ({reliability}) • {opens} local link-open requests'
         if prices and self.metric.get() == 'Item price':
@@ -194,7 +218,9 @@ class AnalyticsPage(ttk.Frame):
                 return
             values = [r['price']/100 for r in records]
             xs = [timestamp(r['at']).timestamp() for r in records]
-            lo, hi = min(values), max(values)
+            target=self.watch_map.get(self.watch.get(),{}).get('target')
+            bounds=values+([target/100] if target is not None else [])
+            lo, hi = min(bounds), max(bounds)
             pad = max((hi-lo)*.12, max(1, hi*.01))
             ymin, ymax = max(0, lo-pad), hi+pad
             xmin, xmax = min(xs), max(xs)
@@ -208,12 +234,16 @@ class AnalyticsPage(ttk.Frame):
                 label = f"{r['at']} • {r['currency']} {value:,.2f} • {r['stock']} • {r['source']}"
                 self.points.append((px, py, label))
             self.axes(left, right, top, bottom, ymin, ymax, lambda v: f'{v:,.2f}')
+            if target is not None:
+                ty=bottom-(target/100-ymin)/(ymax-ymin)*(bottom-top)
+                self.canvas.create_line(left,ty,right,ty,fill='#e2c48c',dash=(6,4),width=2)
+                self.canvas.create_text(right,ty-10,anchor='e',text=f'Item-price guide {target/100:,.2f}',fill='#e2c48c')
             if len(points) > 1:
                 self.canvas.create_line(*[v for p in points for v in p], fill=ACCENT, width=2)
             # Preserve every observation in the line and hover index; draw fewer visible dots for large series.
             for px, py in points[::max(1,len(points)//200)]:
                 self.canvas.create_oval(px-3, py-3, px+3, py+3, fill=ACCENT, outline='')
-            self.canvas.create_text(left, 16, anchor='w', fill=TEXT, text=f"{records[-1]['currency']} • item price • observation time (UTC)")
+            self.canvas.create_text(left, 16, anchor='w', fill=TEXT, text=f"{records[-1]['currency']} • item price • observation time (UTC) · target guide excludes shipping")
             first_label, last_label = records[0]['at'][:16], records[-1]['at'][:16]
         else:
             daily = self.data['daily']

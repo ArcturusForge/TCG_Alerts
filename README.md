@@ -2,7 +2,7 @@
 
 A private desktop radar for sealed TCG prices and restocks. Built for a Windows PC first, with Linux source support. No hosted server, subscription or API keys are required. Source needs Python with Tk and Pillow; Windows also uses pystray. Dependencies are included in packaged executables.
 
-**Status: working v0.4 MVP, not yet a full-store aggregation service.** It monitors exact product URLs that you choose. It does not claim coverage of 150 stores, verified merchants, physical inventory or guaranteed restock detection.
+**Status: working v0.5 MVP, not yet a full-store aggregation service.** It monitors exact product URLs that you choose. It does not claim coverage of 150 stores, verified merchants, physical inventory or guaranteed restock detection.
 
 ## Start
 
@@ -29,7 +29,7 @@ The result is `dist/TCGAlerts.exe`. Build on the target operating system; a Linu
 1. Choose **Track a product** and paste an exact HTTPS product URL. For Shopify pages with multiple options, select the desired option in the shop and copy its `?variant=...` URL. Ambiguous variants are rejected with the available IDs in the error detail.
 2. Add a target price and optionally a shipping amount. Targets are in the listing's reported currency. A blank shipping amount means unknown; `0` means free. A target includes shipping only when that amount is supplied.
 3. Leave the app open. New watches are checked automatically; each successful listing is scheduled again in 15 minutes, with up to 30 seconds of jitter. **Check prices** wakes the worker but does not bypass cooldowns. Failed checks back off exponentially up to 24 hours.
-4. Read alerts in Alerts in the left menu. The app rings its bell when an alert occurs; native Windows tray notifications are available. Closing exits by default; optional close-to-tray continues while the PC is awake. A sleeping PC cannot collect observations.
+4. Read alerts using **Alerts** in the left menu. The app rings its bell when an alert occurs; native Windows tray notifications are available. Closing exits by default; optional close-to-tray continues while the PC is awake. A sleeping PC cannot collect observations.
 5. Compare stores by assigning identical products the same comparison group. Match language, set, edition, product type and quantity yourself. The table separates currencies, excludes failed/stale/paused listings, and leaves unknown delivered costs blank. It does not automatically normalize product names.
 
 The **Discover** tab reads one collection page and extracts same-store Shopify-style product links. Only Packs' Riftbound collection is prefilled as a convenient starting URL, not an endorsement. Select a result to create a watch. This is not exhaustive catalog discovery: pagination and JavaScript-only listings are not followed.
@@ -69,13 +69,13 @@ Core modules: `core.py` (SQLite and transitions), `sources.py` (transport, adapt
 
 ## v0.2 — region, games, news and analytics
 
-Use the **Game**, **Store country**, and **Store state / region** selectors above the tabs. For example: `Riftbound → Australia → Victoria`. Selecting an Australian state sets the country to Australia. Reset clears every watchlist filter. You can tag Riftbound, Cyberpunk and other games or enter custom game/country/region names in the watch editor.
+Use the **Game**, **Store country**, and **Store state / region** selectors above the current page. For example: `Riftbound → Australia → Victoria`. Selecting an Australian state sets the country to Australia. Reset clears every watchlist filter. You can tag Riftbound, Cyberpunk and other games or enter custom game/country/region names in the watch editor.
 
 These are **store location tags you supply**, not shipping eligibility or a verified address directory. An Australian currency, domain or product language does not establish where a store is based. Existing v0.1 watches migrate as Unspecified; edit their tags to include them in location/game filters. The upgrade preserves watches, observations and alerts. Country/state/game filters apply to counters, watchlists, comparisons, alert history and analytics. Search/status filters apply to the watchlist. Monitoring continues for all enabled watches even when hidden by a view filter. CSV export remains a full watchlist export and includes the new tags.
 
 ### News board
 
-The **News** tab reads headline links and publication dates from the official Riftbound and Cyberpunk news pages. It refreshes due sources hourly while the app is open and caches headlines for offline use. Failed sources retain their cached items and show an error in **Manage sources**. A refresh button respects cooldowns. This reads the visible publisher index page, not their entire archive.
+The **News** page reads headline links and publication dates from the official Riftbound and Cyberpunk news pages. It refreshes due sources hourly while the app is open and caches headlines for offline use. Failed sources retain their cached items and show an error in **Manage sources**. A refresh button respects cooldowns. This reads the visible publisher index page, not their entire archive.
 
 Filter by game above and by topic inside the board. Topic tags come from headline keywords and can be imperfect. **Publication dates are not release dates.** No article publication date is promoted to a product release date, and seasonal windows such as “Spring” are not translated into Australian dates. Open the source story for release details and territory. These publisher indexes have global/unspecified regional scope; store-country filters deliberately do not hide them.
 
@@ -156,4 +156,19 @@ Use **Save price snapshot** to record the current subtotals, copy coverage and t
 
 The illustrated banner, paper-strip accents and selected navigation row take inspiration from game menus. A persistent left menu groups collection tools, exploration and preferences. The current page has its own title and short explanation; watchlist search, counts and price-check controls stay with the watchlist. Game and store-region filters remain visible across pages (each page retains its documented filter scope).
 
-Empty watchlists explain the first step; filtered empty results suggest clearing filters. Actions needing a selected watch are disabled until a row is selected. Tables support horizontal scrolling; deck actions wrap to the available width. Initial window size fits the display, with a supported minimum of 1180 × 700. Use Tab and Space to navigate controls, Ctrl+1 for the watchlist, and Ctrl+F for watchlist search. Native fonts depend on the operating system.
+Empty watchlists explain the first step; filtered empty results suggest clearing filters. Actions needing a selected watch are disabled until a row is selected. Tables support horizontal scrolling; secondary deck actions live in a compact menu and the banner shortens in smaller windows. Initial window size fits the display, with a supported minimum of 1180 × 700. Use Tab and Space to navigate controls, Ctrl+1 for the watchlist, and Ctrl+F for watchlist search. Native fonts depend on the operating system.
+
+
+## v0.5 — visuals, catalogue providers and first-use help
+
+Decks now default to an **Artwork gallery** with card search, section filtering, quantity/ownership/missing-copy badges and unit reference values. Switch to **Price table** for the complete evidence view. Select a tile to inspect its source; double-click/Enter edits it. Arrow keys select cards. **Deck overview** charts owned/missing progress and the largest priced lines; unpriced copies are excluded and disclosed. It uses the same report as the table.
+
+**Find card / artwork** searches a game catalogue and presents candidate printings to choose from. OpenRift supports Riftbound out of the box. Choosing a candidate never imports a market price or confirms a store listing. Other games remain usable with manual imports, artwork URLs/local files and compatible store watches. Install additional game catalogues or custom store readers through **Settings → Game / store plugins**; reload without recompiling. The included Pokémon TCGdex JSON manifest is an example. [Plugin format and runtime rules](docs/PLUGINS.md).
+
+News defaults to illustrated **Story tiles**, with a headline-table alternative. Publisher index images and RSS media thumbnails are associated with the corresponding story; missing pictures keep labelled placeholders. Source/game/date/topic remain visible. The image is an illustration, not release-date evidence. Analytics adds summary cards and an item-price target guide, retaining interactive hover and the plotted-data inspector. Shipping is excluded from the chart; price alerts retain their existing delivered-price semantics.
+
+Only visible gallery tiles request images; three background image workers share requests, decode bounded previews, and maintain a 96 MiB disk cache plus bounded memory. Saved images/searches can be used offline. Artwork is revalidated after 24 hours when the view refreshes; a failed refresh preserves a labelled saved image and backs off retries. Images are fetched directly from their sources. Backups still do not include artwork files or plugins; those can be re-fetched/reinstalled or copied separately.
+
+**Getting started (F1)** explains the first product, deck and chart. **Open backup as a separate copy** validates a SQLite backup, creates/migrates a new copy and opens it in another app window. It does not replace the active database or alter the supplied backup. **Download / check new builds** opens the repository workflow page; automatic installation is not implemented.
+
+[Validation and source sample](docs/V05_VALIDATION.md). Still pending: a Cyberpunk catalogue plugin, broader store-specific adapters, sold-price feeds, shared inventory reservations, deck budget alerts, automatic release/calendar refresh/reminders, automatic updates and game-specific legality rules.

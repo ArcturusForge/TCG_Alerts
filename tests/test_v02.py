@@ -39,7 +39,7 @@ class UpgradeTests(unittest.TestCase):
         self.assertEqual(w['country'], 'Unspecified')
         Database(old)
         self.assertEqual(len(upgraded.news_sources()),2)
-        self.assertEqual(upgraded.rows('PRAGMA user_version')[0]['user_version'],4)
+        self.assertEqual(upgraded.rows('PRAGMA user_version')[0]['user_version'],5)
 
     def test_tags_and_hierarchical_filter(self):
         a=self.db.add('https://a.example/products/box',game='riftbound',country='au',state='vic')

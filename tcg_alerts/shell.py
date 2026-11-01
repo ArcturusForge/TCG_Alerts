@@ -50,11 +50,19 @@ class CollectorShell:
         self.banner.pack(fill='x', pady=(0, 16))
         self.index = 0
         self.banner.bind('<Configure>', self.draw)
+        app.bind('<Configure>',self.resize,add='+')
+
+    def resize(self,event):
+        if event.widget is not self.app:return
+        height=85 if event.height<820 else 135
+        if int(self.banner.cget('height'))!=height:self.banner.configure(height=height)
 
     def draw(self, event=None):
         c = self.banner
         c.delete('all')
         w = c.winfo_width()
+        compact=c.winfo_height()<110
+        c.create_rectangle(0,0,w,c.winfo_height(),fill='#1b3036',outline='')
         # Original paper-strip and card motifs echo the reference without shipping borrowed art.
         c.create_polygon(0, 12, w*.75, 0, w*.68, 135, 0, 135, fill='#243e42', outline='')
         c.create_polygon(0, 16, min(w-35, 535), 8, min(w-65, 505), 34, 0, 43, fill='#c7d2bc', outline='')
@@ -66,8 +74,8 @@ class CollectorShell:
                 c.create_polygon(x+12, 40+dy, x+45, 46+dy, x+34, 83+dy, x+2, 77+dy, fill='#243e42', outline='')
         _, title, subtitle = PAGES[self.index]
         c.create_text(20, 25, text='YOUR COLLECTION, CONNECTED', anchor='w', fill='#1b3036', font=(self.app.font_family, 9, 'bold'))
-        c.create_text(20, 69, text=title, anchor='w', fill='#f7f1e5', font=(self.app.font_family, 24, 'bold'))
-        c.create_text(20, 109, text=subtitle, anchor='w', fill='#c7d9d5', font=(self.app.font_family, 10), width=max(300,w-215))
+        c.create_text(20, 52 if compact else 69, text=title, anchor='w', fill='#f7f1e5', font=(self.app.font_family, 17 if compact else 24, 'bold'))
+        c.create_text(20, 74 if compact else 109, text=subtitle, anchor='w', fill='#c7d9d5', font=(self.app.font_family, 9 if compact else 10), width=max(300,w-215))
 
     def changed(self, event=None):
         self.index = self.app.tabs.index(self.app.tabs.select())
