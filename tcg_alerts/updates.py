@@ -45,6 +45,7 @@ class Releases:
                 if len(data)>2*1024*1024:raise ValueError('Release metadata exceeds limit.')
                 result=json.loads(data)
         except error.HTTPError as e:
+            if e.code==403 and e.headers and e.headers.get('X-RateLimit-Remaining')=='0':raise ValueError('GitHub API rate limit reached; try later or configure TCG_ALERTS_GITHUB_TOKEN for authenticated checks.') from None
             if e.code==404:raise ValueError('No visible stable release. Private repositories need TCG_ALERTS_GITHUB_TOKEN with repository read access.') from None
             raise ValueError('GitHub release check failed (HTTP '+str(e.code)+').') from None
         if result.get('draft') or result.get('prerelease'):raise ValueError('Only published stable releases can auto-update.')

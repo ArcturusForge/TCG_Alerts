@@ -36,6 +36,8 @@ jobs:
       - name: Official browser helper download and live render (Windows)
         if: runner.os == 'Windows'
         timeout-minutes: 8
+        env:
+          TCG_ALERTS_GITHUB_TOKEN: ${{ github.token }}
         run: python scripts/check_browser_helper.py
       - name: Install packager
         run: python -m pip install pyinstaller==6.16.0

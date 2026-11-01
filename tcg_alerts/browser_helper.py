@@ -23,13 +23,13 @@ class BrowserHelper:
             if machine not in ('amd64','x86_64'):raise ValueError('Automatic browser-helper binaries currently require Windows/Linux x64.')
             if sys.platform not in ('win32','linux'):raise ValueError('This OS needs an externally managed browser helper.')
             self.status('Checking browser helper release…')
-            release=Releases(token='').latest(HELPER_REPO)
+            release=Releases().latest(HELPER_REPO)
             name='flaresolverr_windows_x64.zip' if sys.platform=='win32' else 'flaresolverr_linux_x64.tar.gz'
             binary='flaresolverr.exe' if sys.platform=='win32' else 'flaresolverr'
             def validate(folder):
                 if len([p for p in folder.rglob(binary) if p.is_file()])!=1:raise ValueError('Helper archive is missing its executable.')
             self.status('Preparing browser helper (first download is roughly 250–400 MB)…')
-            folder=install_version(Releases(token=''),HELPER_REPO,release,select_asset(release,name),self.root/'versions',validate)
+            folder=install_version(Releases(),HELPER_REPO,release,select_asset(release,name),self.root/'versions',validate)
             return folder
     def ensure(self,update=False):
         with self.lock:
