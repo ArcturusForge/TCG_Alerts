@@ -12,7 +12,9 @@ The packaged Windows app stages new releases while running. Closing it hands off
 
 Source launches and Linux builds download/stage an update; use **Restart into downloaded update** to launch its executable. They do not rewrite a git checkout or replace an arbitrary Linux installation. Disable automatic app downloads to keep updates manual. A failed check does not discard an already staged update. There is no claim that a smoke check detects every later runtime fault; the previous executable is retained for manual recovery.
 
-This repository is private. GitHub returns 404 to unauthenticated release checks. Configure `TCG_ALERTS_GITHUB_TOKEN` in the PC's environment with read access to this repository to enable private release/plugin downloads. No account token is embedded in the app, release files, logs or repository. Public helper releases need no token. Publishing requires the repository Actions token's contents-write permission in the gated release job.
+This repository is public. App releases, the bundled provider release ZIPs and the public browser-helper releases can be checked and downloaded without a GitHub token. No extra update configuration is required after installing v0.6.1.
+
+`TCG_ALERTS_GITHUB_TOKEN` remains optional for higher API rate limits or private third-party provider repositories; those private repositories require read access. No account token is embedded in the app, release files, logs or repository. Publishing still uses the repository Actions token's contents-write permission in the gated release job.
 
 ## Plugin updates
 
