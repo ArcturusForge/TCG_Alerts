@@ -11,7 +11,7 @@ PAGES = (
     ('News', 'Around the card table', 'Catch up on publisher announcements and your chosen news feeds.'),
     ('Calendar', 'Something to look forward to', 'Keep upcoming releases and events together in one place.'),
     ('Stores', 'Find your local favourites', 'Explore your store directory and open a store to discover its products.'),
-    ('Discover', 'Start your next search', 'Find product links on a store collection page, then choose what to track.'),
+    ('Discover', 'Start your next search', 'Search every synced store at once, then track an exact product in one click.'),
     ('Settings & data', 'Make yourself at home', 'Choose notifications, protect your data, and manage the desktop app.'),
 )
 
