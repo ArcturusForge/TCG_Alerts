@@ -104,6 +104,16 @@ class UpgradeTests(unittest.TestCase):
         monitor.cycle()
         self.assertEqual(len(calls),2)
 
+    def test_failed_news_source_retries_on_refresh(self):
+        calls=[]
+        def boom(s,c):
+            calls.append(s['id']);raise ValueError('SSL')
+        monitor=NewsMonitor(self.db,queue.Queue(),fetcher=boom)
+        monitor.cycle();monitor.cycle()
+        self.assertEqual(len(calls),2)  # startup try only; then cooldown
+        monitor.refresh();monitor.cycle()
+        self.assertEqual(len(calls),4)
+
 
 class NewsParserTests(unittest.TestCase):
     def test_riftbound_headline_and_publication_only(self):
