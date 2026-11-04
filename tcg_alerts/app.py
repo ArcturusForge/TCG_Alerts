@@ -1,5 +1,6 @@
 """Desktop UI. All widget access stays on the main thread."""
 from __future__ import annotations
+import sys
 import argparse
 import csv
 import queue
@@ -256,9 +257,10 @@ class App(tk.Tk):
         self.tabs.add(self.calendar_page,text='Calendar')
         self.directory_page=Directory(self,self.tabs)
         self.tabs.add(self.directory_page,text='Stores')
-        discovery = ttk.Frame(self.tabs, padding=18)
-        self.discovery_page=discovery
-        self.tabs.add(discovery, text='Discover')
+        from .shell import scrollable
+        discovery_outer, discovery = scrollable(self.tabs)
+        self.discovery_page=discovery_outer
+        self.tabs.add(discovery_outer, text='Discover')
         ttk.Label(discovery, text='Search the product catalogue', style='Heading.TLabel').pack(anchor='w')
         ttk.Label(discovery, text='Sync stores to pull their public product listings, then search every store at once. Prices and stock are as of the last sync; tracking checks them live.', style='Muted.TLabel', wraplength=1000).pack(anchor='w', pady=(4, 6))
         cat_tools = ttk.Frame(discovery); cat_tools.pack(fill='x', pady=4)
@@ -287,8 +289,8 @@ class App(tk.Tk):
         self.discovery_table = self.make_table(discovery, [('title', 'Store title', 400), ('url', 'Product URL', 600)], expand=False)
         self.discovery_table.configure(height=5)
         self.discovery_table.bind('<Double-1>', lambda e: self.track_discovery())
-        settings = ttk.Frame(self.tabs, padding=20)
-        self.tabs.add(settings, text='Settings & data')
+        settings_outer, settings = scrollable(self.tabs, padding=20)
+        self.tabs.add(settings_outer, text='Settings & data')
         getting_started=ttk.Frame(settings);getting_started.pack(fill='x',pady=(0,10))
         ttk.Button(getting_started,text='Getting started (F1)',command=self.show_guide).pack(side='left')
         ttk.Button(getting_started,text='Game / store plugins',command=self.manage_plugins).pack(side='left',padx=10)
@@ -298,7 +300,7 @@ class App(tk.Tk):
         ttk.Label(settings, text='Checks run every 15 minutes while this app is open. Sleeping or closing the PC stops checks.\nFailures back off automatically. Manual checks respect the scheduled cooldown.\nAlerts are saved here and ring the bell. Windows native tray notifications are supported; email/Telegram are not configured.\nThe app reads public Shopify product data and single-offer JSON-LD pages.\nIt respects robots.txt and does not bypass login, CAPTCHA or blocked storefronts.\n\nYour database: ' + str(self.db.path), style='Muted.TLabel', wraplength=1000).pack(anchor='w', pady=18)
         self.native_enabled=tk.BooleanVar(value=self.db.setting('native_notifications',True))
         self.close_to_tray=tk.BooleanVar(value=self.db.setting('close_to_tray',False))
-        ttk.Checkbutton(settings,text='Native Windows notifications',variable=self.native_enabled,command=self.save_native).pack(anchor='w',pady=4)
+        ttk.Checkbutton(settings,text='Desktop notifications',variable=self.native_enabled,command=self.save_native).pack(anchor='w',pady=4)
         ttk.Checkbutton(settings,text='Closing minimizes to tray (when ready)',variable=self.close_to_tray,command=self.save_native).pack(anchor='w',pady=4)
         buttons=ttk.Frame(settings);buttons.pack(anchor='w',pady=8)
         for title,action in [('Minimize to tray',self.minimize_to_tray),('Test notification',self.test_notification),('Exit application',self.close)]:ttk.Button(buttons,text=title,command=action).pack(side='left',padx=(0,8))
@@ -690,7 +692,7 @@ class App(tk.Tk):
         if changed or time.monotonic() - self.last_refresh > 60:
             self.refresh()
             self.last_refresh = time.monotonic()
-        self.native_status.set('Native tray ready; visibility depends on Windows settings.' if self.desktop.available() else self.desktop.error or 'Tray is not ready. The window remains accessible.')
+        self.native_status.set(('Desktop notifications use notify-send. The tray is Windows only.' if not self.desktop.error else self.desktop.error) if sys.platform!='win32' else 'Native tray ready; visibility depends on Windows settings.' if self.desktop.available() else self.desktop.error or 'Tray is not ready. The window remains accessible.')
         self.after(500, self.drain)
 
     def save_native(self):
@@ -698,7 +700,7 @@ class App(tk.Tk):
         self.db.set_setting('close_to_tray',self.close_to_tray.get())
 
     def test_notification(self):
-        if not self.desktop.available():self.desktop.start()
+        if sys.platform=='win32' and not self.desktop.available():self.desktop.start()
         self.bell()
         self.status.set('Test notification requested.' if self.desktop.notify('This is a TCG Alerts test.') else self.desktop.error or 'Tray is starting; try again shortly.')
 
