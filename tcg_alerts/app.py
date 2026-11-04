@@ -265,7 +265,6 @@ class App(tk.Tk):
         self.catalogue_query = tk.StringVar(); self.catalogue_game = tk.StringVar(value='All games'); self.catalogue_stock = tk.BooleanVar(value=False)
         query_entry = ttk.Entry(cat_tools, textvariable=self.catalogue_query, width=40); query_entry.pack(side='left', fill='x', expand=True)
         query_entry.bind('<Return>', lambda e: self.search_catalogue())
-        from .catalog import GAMES
         ttk.Combobox(cat_tools, textvariable=self.catalogue_game, values=('All games',) + GAMES, state='readonly', width=20).pack(side='left', padx=6)
         ttk.Checkbutton(cat_tools, text='In stock only', variable=self.catalogue_stock, command=self.search_catalogue).pack(side='left', padx=6)
         ttk.Button(cat_tools, text='Search', command=self.search_catalogue).pack(side='left', padx=6)
