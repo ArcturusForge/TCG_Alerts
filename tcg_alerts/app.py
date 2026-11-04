@@ -113,6 +113,8 @@ class App(tk.Tk):
         self.update_status=tk.StringVar(value=self.updates.status)
         self.images = ImageService(db.path.parent / 'artwork_cache', self.monitor.events)
         self.news_monitor = NewsMonitor(db, self.monitor.events)
+        from .product_catalogue import CatalogueMonitor
+        self.catalogue_monitor = CatalogueMonitor(db, self.monitor.events)
         self.desktop=Desktop(self.monitor.events)
         self._closing=False
         self.title('TCG Alerts • sealed product radar')
@@ -135,6 +137,7 @@ class App(tk.Tk):
         if start_monitor:
             self.monitor.start()
             self.news_monitor.start()
+            self.catalogue_monitor.start()
             self.desktop.start()
             self.updates.start()
         self.after(250, self.drain)
@@ -262,7 +265,7 @@ class App(tk.Tk):
         self.discovery_page=discovery_outer
         self.tabs.add(discovery_outer, text='Discover')
         ttk.Label(discovery, text='Search the product catalogue', style='Heading.TLabel').pack(anchor='w')
-        ttk.Label(discovery, text='Sync stores to pull their public product listings, then search every store at once. Prices and stock are as of the last sync; tracking checks them live.', style='Muted.TLabel', wraplength=1000).pack(anchor='w', pady=(4, 6))
+        ttk.Label(discovery, text='Store listings sync automatically every 12 hours while the app is open (or press Sync stores). Search every store at once. Catalogue prices are as of the last sync; tracked products are checked live.', style='Muted.TLabel', wraplength=1000).pack(anchor='w', pady=(4, 6))
         cat_tools = ttk.Frame(discovery); cat_tools.pack(fill='x', pady=4)
         self.catalogue_query = tk.StringVar(); self.catalogue_game = tk.StringVar(value='All games'); self.catalogue_stock = tk.BooleanVar(value=False)
         query_entry = ttk.Entry(cat_tools, textvariable=self.catalogue_query, width=24); query_entry.pack(side='left')
@@ -719,6 +722,7 @@ class App(tk.Tk):
         self.updates.close()
         self.monitor.close()
         self.news_monitor.close()
+        self.catalogue_monitor.close()
         if self.updates.pending and (self.db.setting('auto_updates',True) or getattr(self,'_apply_update_now',False)):
             import sys,os
             if getattr(sys,'frozen',False) and sys.platform=='win32':
@@ -734,6 +738,7 @@ class App(tk.Tk):
         self.desktop.stop()
         self.monitor.close()
         self.news_monitor.close()
+        self.catalogue_monitor.close()
         self.destroy()
 
 

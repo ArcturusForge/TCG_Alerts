@@ -50,3 +50,37 @@ class CatalogueTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class DueTests(CatalogueTests):
+    def test_due_rules(self):
+        import time
+        stores = [('Shop', 'https://shop.example')]
+        self.assertEqual(pc.due_stores(self.db, stores), stores)
+        pc.sync_store(self.db, FakeClient([page(1)]), 'Shop', 'https://shop.example')
+        self.assertEqual(pc.due_stores(self.db, stores), [])
+        self.assertEqual(pc.due_stores(self.db, stores, clock=time.time() + 13 * 3600), stores)
+
+
+class DeckMatchTests(CatalogueTests):
+    def test_match_and_link(self):
+        from tcg_alerts.decks import DeckStore
+        singles = {'products': [
+            {'id': 1, 'handle': 'jinx', 'title': 'Jinx, Loose Cannon - Riftbound Single', 'vendor': '', 'product_type': '', 'tags': [], 'images': [],
+             'variants': [{'id': 11, 'title': 'Default Title', 'price': '4.50', 'available': True}]},
+            {'id': 2, 'handle': 'jinx2', 'title': 'Jinx, Loose Cannon (Foil) - Riftbound', 'vendor': '', 'product_type': '', 'tags': [], 'images': [],
+             'variants': [{'id': 22, 'title': 'Default Title', 'price': '2.00', 'available': False}]},
+            {'id': 3, 'handle': 'vi', 'title': 'Vi - Riftbound', 'vendor': '', 'product_type': '', 'tags': [], 'images': [],
+             'variants': [{'id': 33, 'title': 'Default Title', 'price': '1.00', 'available': True}]}]}
+        pc.sync_store(self.db, FakeClient([singles]), 'Shop', 'https://shop.example')
+        store = DeckStore(self.db)
+        deck = store.save_deck('Clockwork', 'Riftbound')
+        jinx = store.save_entry(deck, dict(name='Jinx, Loose Cannon', quantity=3, owned=1))
+        store.save_entry(deck, dict(name='Owned Card', quantity=1, owned=1))
+        m = pc.deck_matches(self.db, deck)
+        self.assertEqual([x['entry']['id'] for x in m], [jinx])
+        self.assertEqual(m[0]['candidates'][0]['price'], 450)  # in stock first, though dearer
+        pc.link_entry(self.db, deck, jinx, m[0]['candidates'][0], 'Riftbound')
+        self.assertEqual(pc.deck_matches(self.db, deck), [])
+        line = [l for l in store.report(deck)['lines'] if l['id'] == jinx][0]
+        self.assertTrue(line['listing_url'].endswith('?variant=11'))
