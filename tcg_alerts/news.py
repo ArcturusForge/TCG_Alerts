@@ -52,6 +52,7 @@ class PublisherPage(HTMLParser):
         self.current = None
         self.heading_tag = None
         self.items = {}
+        self.blurbs = {}  # article-card text for calendar detection; never used for 'published'
 
     def handle_starttag(self, tag, attrs):
         attrs = dict(attrs)
@@ -93,6 +94,7 @@ class PublisherPage(HTMLParser):
                         pass
             if title:
                 self.items[c['url']] = item(title, c['url'], date,c['image_url'])
+                self.blurbs[c['url']] = ' '.join(' '.join(c['all']).split())[:800]
             self.current = None
             self.heading_tag = None
 
@@ -147,7 +149,7 @@ class EmbeddedJSON(HTMLParser):
             except (ValueError,RecursionError):pass
 
 
-def attach_publisher_images(text,items,source):
+def attach_publisher_images(text,items,source,blurbs=None):
     parser=EmbeddedJSON();parser.feed(text);stack=list(parser.documents);count=0
     while stack and count<50000:
         node=stack.pop();count+=1
@@ -157,6 +159,9 @@ def attach_publisher_images(text,items,source):
             payload=action.get('payload',{}) if isinstance(action,dict) else {}
             url=artwork_url(payload.get('url'),source['url']) if isinstance(payload,dict) else ''
             if url in items:
+                text=' '.join(v if isinstance(v,str) else str(v.get('body','')) for v in (node.get(k) for k in ('description','summary','subtitle','excerpt','blurb')) if isinstance(v,str) or (isinstance(v,dict) and isinstance(v.get('body'),str)))
+                text=re.sub(r'<[^>]+>',' ',text)
+                if text and blurbs is not None:blurbs[url]=(blurbs.get(url,'')+' '+text)[:1600]
                 media=node.get('imageMedia') or node.get('media') or {}
                 if isinstance(media,dict):
                     image=artwork_url(media.get('url'),source['url'])
@@ -170,10 +175,10 @@ def fetch_news(source, client):
         return feed_items(text, source)
     parser = PublisherPage(source)
     parser.feed(text)
-    attach_publisher_images(text,parser.items,source)
+    attach_publisher_images(text,parser.items,source,parser.blurbs)
     if not parser.items:
         raise ValueError('NEWS: Publisher page returned no recognizable headlines; cached items retained.')
-    return list(parser.items.values())[:100]
+    return [dict(v, blurb=parser.blurbs.get(u, '')) for u, v in list(parser.items.items())[:100]]
 
 
 class NewsMonitor:
@@ -210,6 +215,11 @@ class NewsMonitor:
             try:
                 items = self.fetcher(source, self.client)
                 self.db.save_news(source['id'], items, time.time() + 3600)
+                try:
+                    from .release_watch import ingest
+                    ingest(self.db, source['game'], items)
+                except Exception:
+                    pass  # calendar detection never blocks headlines
             except Exception as e:
                 self.db.fail_news(source['id'], str(e), time.time() + 900)
             self.events.put(('news_updated', None))

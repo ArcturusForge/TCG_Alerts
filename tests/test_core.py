@@ -107,3 +107,18 @@ class MoneyInputTests(__import__('unittest').TestCase):
         for bad in ('12,50', '1,2,3', '-5', '1.234', 'abc'):
             with self.assertRaises(ValueError):
                 money(bad)
+
+
+class LinuxNotifyTests(__import__('unittest').TestCase):
+    def test_notify_send_used_off_windows(self):
+        from unittest import mock
+        from tcg_alerts import desktop
+        d = desktop.Desktop(None)
+        with mock.patch.object(desktop.sys, 'platform', 'linux'), \
+             mock.patch.object(desktop.shutil, 'which', return_value='/usr/bin/notify-send'), \
+             mock.patch.object(desktop.subprocess, 'Popen') as popen:
+            self.assertTrue(d.notify('Price drop'))
+            self.assertEqual(popen.call_args[0][0][-1], 'Price drop')
+        with mock.patch.object(desktop.sys, 'platform', 'linux'), mock.patch.object(desktop.shutil, 'which', return_value=None):
+            self.assertFalse(d.notify('x'))
+            self.assertIn('notify-send', d.error)

@@ -25,7 +25,7 @@ class CollectorShell:
         self.rail.pack(side='left', fill='y', padx=(0, 22))
         self.rail.pack_propagate(False)
         tk.Label(self.rail, text='TCG / ALERTS', bg='#111b29', fg='#f4eee1',
-                 font=(app.font_family, 17, 'bold'), anchor='w').pack(fill='x', padx=16, pady=(25, 3))
+                 font=(app.font_family, 14, 'bold'), anchor='w').pack(fill='x', padx=14, pady=(22, 3))
         tk.Label(self.rail, text='THE COLLECTOR’S DESK', bg='#111b29', fg='#a6b8bd',
                  font=(app.font_family, 8), anchor='w').pack(fill='x', padx=16, pady=(0, 25))
         self.buttons = []
@@ -36,14 +36,12 @@ class CollectorShell:
                          font=(app.font_family, 8, 'bold')).pack(fill='x', padx=16, pady=(14, 7))
             button = tk.Button(self.rail, text=label, anchor='w', relief='flat', bd=0,
                                bg='#111b29', fg='#c1ced1', activebackground='#314749',
-                               activeforeground='#fff6df', cursor='hand2', padx=16, pady=10,
+                               activeforeground='#fff6df', cursor='hand2', padx=16, pady=7,
                                font=(app.font_family, 10), takefocus=True, highlightthickness=1,
                                highlightbackground='#111b29', highlightcolor='#d5e5c8',
                                command=lambda i=index: app.tabs.select(i))
             button.pack(fill='x', padx=7, pady=2)
             self.buttons.append(button)
-        tk.Label(self.rail, text='PRIVATE DESKTOP\nYour collection. Your pace.', bg='#111b29',
-                 fg='#93aaa9', justify='left', anchor='w', font=(app.font_family, 9)).pack(side='bottom', fill='x', padx=16, pady=22)
         self.main = ttk.Frame(outer)
         self.main.pack(side='left', fill='both', expand=True)
         self.banner = tk.Canvas(self.main, height=135, bg='#1b3036', highlightthickness=0)
@@ -85,3 +83,24 @@ class CollectorShell:
                              text=('›  ' if selected else '   ') + PAGES[i][0])
         self.draw()
 
+
+
+def scrollable(notebook, padding=18, bg='#0d1321'):
+    """A notebook page whose content scrolls vertically when the window is short."""
+    outer = ttk.Frame(notebook)
+    canvas = tk.Canvas(outer, highlightthickness=0, bd=0, bg=bg)
+    bar = ttk.Scrollbar(outer, orient='vertical', command=canvas.yview)
+    inner = ttk.Frame(canvas, padding=padding)
+    window = canvas.create_window(0, 0, window=inner, anchor='nw')
+    canvas.configure(yscrollcommand=bar.set)
+    bar.pack(side='right', fill='y')
+    canvas.pack(side='left', fill='both', expand=True)
+    inner.bind('<Configure>', lambda e: canvas.configure(scrollregion=canvas.bbox('all')))
+    canvas.bind('<Configure>', lambda e: canvas.itemconfigure(window, width=e.width))
+    def wheel(event):
+        if canvas.winfo_ismapped() and str(event.widget).startswith(str(outer)):
+            delta = -1 if getattr(event, 'num', 0) == 4 or getattr(event, 'delta', 0) > 0 else 1
+            canvas.yview_scroll(delta, 'units')
+    for seq in ('<MouseWheel>', '<Button-4>', '<Button-5>'):
+        canvas.bind_all(seq, wheel, add='+')
+    return outer, inner

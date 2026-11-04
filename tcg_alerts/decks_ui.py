@@ -89,13 +89,13 @@ class DeckPage(ttk.Frame):
         ttk.Label(header,text='Deck builder & cost tracker',style='Heading.TLabel').pack(side='left')
         self.choice=tk.StringVar();self.picker=ttk.Combobox(header,textvariable=self.choice,state='readonly',width=44);self.picker.pack(side='right');self.picker.bind('<<ComboboxSelected>>',lambda e:self.refresh())
         controls=ttk.Frame(self);controls.pack(fill='x',pady=(0,8))
-        primary=[('New deck',lambda:self.edit_deck(False)),('Import list',self.import_text),('Add card',self.add),('Edit selected',self.edit)]
+        primary=[('New deck',lambda:self.edit_deck(False)),('Import list',self.import_text),('Add card',self.add),('Edit selected',self.edit),('Find missing in stores',lambda:find_in_stores(self))]
         for title,action in primary:ttk.Button(controls,text=title,command=action).pack(side='left',padx=(0,6))
         more=ttk.Menubutton(controls,text='More deck actions ▾');more.pack(side='left')
         menu=tk.Menu(more,tearoff=False,bg='#151f32',fg='#e9effa',activebackground='#2d4961',activeforeground='#e9effa')
         for title,action in [('Edit deck',lambda:self.edit_deck(True)),('Copy deck',self.copy),('Delete deck',self.delete),('Import CSV',self.import_csv),('Remove selected card',self.remove),('Export CSV',self.export),('Save price snapshot',self.snapshot),('Snapshot history',self.history),('Missing-card budget alert…',self.budget_alert)]:menu.add_command(label=title,command=action)
         more.configure(menu=menu)
-        self.summary=tk.StringVar(value='Create a deck or import a list to start.');ttk.Label(self,textvariable=self.summary,style='Muted.TLabel',wraplength=1250).pack(anchor='w',pady=6)
+        self.summary=tk.StringVar(value='Create a deck or import a list to start.');summary_label=ttk.Label(self,textvariable=self.summary,style='Muted.TLabel',wraplength=980);summary_label.pack(anchor='w',fill='x',pady=6);summary_label.bind('<Configure>',lambda e:summary_label.configure(wraplength=max(300,e.width-8)))
         view_tools=ttk.Frame(self);view_tools.pack(fill='x',pady=(0,8))
         self.view=tk.StringVar(value=app.db.setting('deck_view','Artwork gallery'))
         self.card_search=tk.StringVar();self.section=tk.StringVar(value='All sections')
@@ -136,6 +136,11 @@ class DeckPage(ttk.Frame):
         report=self.store.report(self.current['id']);self.report=report;s=report['summary'];currency=self.current['currency']
         def subtotal(key,count,total):return f"{currency} {s[key]/100:,.2f} ({s[count]}/{s[total]} copies priced)" if s[count] else ('Nothing missing' if s[total]==0 else 'Unpriced')
         self.summary.set(f"Required {s['required']} • owned/available {s['owned']} • missing {s['missing']}\nReference subtotal: {subtotal('reference_subtotal','reference_copies','required')} • Missing-copy reference: {subtotal('missing_reference_subtotal','missing_reference_copies','missing')}\nFresh missing-item asking subtotal: {subtotal('missing_ask_subtotal','missing_ask_copies','missing')} • excludes shipping; seller quantity unverified • {s['reference_old_copies']} copies use stale/failed/paused reference asks")
+        from .deck_rules import check
+        rules=check(self.current['game'],report['lines'])
+        if rules:
+            first=[m for _,m in rules]
+            self.summary.set(self.summary.get()+'\nRules: '+(first[0] if rules[0][0]=='ok' else '⚠ '+' • '.join(first[:3])+(f' (+{len(first)-3} more)' if len(first)>3 else '')))
         for r in report['lines']:
             key=str(r['id']);self.rows[key]=r
             name=r['name']+' · '+r['printing']+' / '+r['language']+' / '+r['condition']
@@ -290,3 +295,50 @@ class DeckPage(ttk.Frame):
         from PIL import ImageTk,Image
         image=self.art.copy();image.thumbnail((max(1,self.canvas.winfo_width()-8),max(1,self.canvas.winfo_height()-8)),Image.Resampling.LANCZOS);self.photo=ImageTk.PhotoImage(image,master=self.app)
         self.canvas.create_image(self.canvas.winfo_width()/2,self.canvas.winfo_height()/2,image=self.photo)
+
+
+def find_in_stores(page):
+    """Window listing catalogue matches for the current deck's missing, unlinked cards."""
+    from .product_catalogue import deck_matches, link_entry
+    if not page.current:
+        page.app.status.set('Choose a deck first.'); return
+    deck = page.current
+    matches = deck_matches(page.app.db, deck['id'])
+    win = tk.Toplevel(page); win.title('Find missing cards in your stores'); win.geometry('1000x520'); win.transient(page.app)
+    frame = ttk.Frame(win, padding=14); frame.pack(fill='both', expand=True)
+    if not matches:
+        ttk.Label(frame, text='No catalogue matches for missing, unlinked cards.\nSync stores on the Discover page first, or check the card names.', style='Muted.TLabel').pack(anchor='w')
+        return win
+    ttk.Label(frame, text='Cheapest in-stock match is preselected for each card. Check the printing and language before linking.', style='Muted.TLabel').pack(anchor='w', pady=(0, 8))
+    cols = [('card', 'Deck card', 180), ('title', 'Store listing', 420), ('store', 'Store', 140), ('price', 'Price', 80), ('stock', 'Stock', 80)]
+    button = ttk.Button(frame, text='Link selected (one per card)', style='Accent.TButton')
+    button.pack(side='bottom', anchor='e', pady=8)
+    tree = ttk.Treeview(frame, columns=[c[0] for c in cols], show='headings', selectmode='extended')
+    for key, label, width in cols:
+        tree.heading(key, text=label); tree.column(key, width=width, stretch=True)
+    tree.pack(fill='both', expand=True)
+    lookup = {}
+    for m in matches:
+        for i, c in enumerate(m['candidates']):
+            iid = tree.insert('', 'end', values=(m['entry']['name'] if i == 0 else '', c['title'], c['store'],
+                                                 '' if c['price'] is None else f"{c['price']/100:,.2f}",
+                                                 {1: 'In stock', 0: 'Sold out'}.get(c['available'], 'Unknown')))
+            lookup[iid] = (m['entry'], c)
+            if i == 0:
+                tree.selection_add(iid)
+    def link():
+        done, seen = 0, set()
+        for iid in tree.selection():
+            entry, cand = lookup[iid]
+            if entry['id'] in seen:
+                continue
+            seen.add(entry['id'])
+            try:
+                link_entry(page.app.db, deck['id'], entry['id'], cand, deck['game']); done += 1
+            except ValueError as e:
+                page.app.status.set(f"{entry['name']}: {e}")
+        page.app.changed(); page.refresh()
+        page.app.status.set(f'Linked {done} cards. Prices appear after the first check.')
+        win.destroy()
+    button.configure(command=link)
+    return win

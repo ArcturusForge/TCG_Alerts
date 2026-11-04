@@ -141,3 +141,89 @@ def sync_status(db):
     ensure(db)
     with db.connect() as c:
         return [dict(r) for r in c.execute('SELECT * FROM catalogue_syncs ORDER BY store')]
+
+
+RESYNC_SECONDS = 12 * 3600
+RETRY_FAILED_SECONDS = 3600
+
+
+def due_stores(db, stores, clock=None):
+    """Stores whose catalogue is missing, older than 12 hours, or failed over an hour ago."""
+    import time
+    from datetime import datetime
+    clock = clock or time.time()
+    status = {s['domain']: s for s in sync_status(db)}
+    due = []
+    for name, url in stores:
+        s = status.get(parse.urlsplit(url).netloc)
+        if not s:
+            due.append((name, url)); continue
+        age = clock - datetime.fromisoformat(s['synced']).timestamp()
+        if age >= (RETRY_FAILED_SECONDS if s['error'] else RESYNC_SECONDS):
+            due.append((name, url))
+    return due
+
+
+class CatalogueMonitor:
+    """Background re-sync so search results stay fresh without pressing Sync."""
+    def __init__(self, db, events, client_factory=None):
+        import threading
+        self.db, self.events = db, events
+        self.client_factory = client_factory
+        self.stop_event = threading.Event()
+
+    def start(self):
+        import threading
+        threading.Thread(target=self.run, daemon=True, name='catalogue-sync').start()
+
+    def close(self):
+        self.stop_event.set()
+
+    def cycle(self):
+        from .sources import Client
+        stores = [(s['name'], s['url']) for s in self.db.stores()]
+        due = due_stores(self.db, stores)
+        if due:
+            results = sync_all(self.db, (self.client_factory or Client)(), due)
+            self.events.put(('catalogue_synced', results))
+
+    def run(self):
+        self.stop_event.wait(60)  # let the app finish starting first
+        while not self.stop_event.is_set():
+            try:
+                self.cycle()
+            except Exception:
+                pass
+            self.stop_event.wait(600)
+
+
+def deck_matches(db, deck_id, per_card=5):
+    """Catalogue candidates for each unlinked deck card that still has missing copies.
+
+    A candidate's title must contain the whole card name, so "Jinx" doesn't
+    match "Jinx, Loose Cannon" boxes unless the title says so. Cheapest
+    in-stock offers come first.
+    """
+    ensure(db)
+    deck = db.rows('SELECT * FROM decks WHERE id=?', (deck_id,))[0]
+    entries = db.rows('SELECT * FROM deck_entries WHERE deck_id=? AND watch_id IS NULL AND quantity>owned ORDER BY name', (deck_id,))
+    out = []
+    for e in entries:
+        name = e['name'].strip().lower()
+        if len(name) < 2:
+            continue
+        rows = search(db, e['name'], deck['game'] if deck['game'] != 'Unspecified' else 'All games', limit=200)
+        rows = [r for r in rows if name in r['title'].lower()]
+        rows.sort(key=lambda r: (r['available'] != 1, r['price'] is None, r['price'] or 0))
+        if rows:
+            out.append(dict(entry=e, candidates=rows[:per_card]))
+    return out
+
+
+def link_entry(db, deck_id, entry_id, candidate, game):
+    """Track the candidate listing and attach it to the deck card as a confirmed link."""
+    existing = db.rows('SELECT id FROM watches WHERE url=?', (candidate['url'],))
+    watch_id = existing[0]['id'] if existing else db.add(candidate['url'], label=candidate['title'], game=game)
+    with db.connect() as c:
+        c.execute('UPDATE deck_entries SET watch_id=?,listing_confirmed=1 WHERE id=? AND deck_id=?', (watch_id, entry_id, deck_id))
+    return watch_id
