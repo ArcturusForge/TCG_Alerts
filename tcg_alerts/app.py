@@ -518,6 +518,11 @@ class App(tk.Tk):
             self.empty_title.configure(text='Your next find starts here' if not all_watches else 'No matching products')
             self.empty_text.configure(text='Paste a store product link, choose a target price, and we’ll watch it for you.' if not all_watches else 'Try another search or clear the game and region filters.')
             self.empty_watch.place(relx=.5, rely=.5, anchor='center')
+        from .release_watch import due_reminders
+        for message in due_reminders(self.db):
+            self.bell()
+            if self.native_enabled.get():self.desktop.notify(message)
+            self.status.set('REMINDER • '+message)
         from .deck_alerts import evaluate
         for event in evaluate(self.db):
             self.bell()
