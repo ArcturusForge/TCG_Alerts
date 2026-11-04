@@ -1,5 +1,6 @@
 """Conservative public storefront adapters; no login or cart writes; optional browser rendering for public pages."""
 from __future__ import annotations
+from .tls import https_handler
 import http.cookiejar
 import json
 import re
@@ -28,7 +29,7 @@ class SameOrigin(request.HTTPRedirectHandler):
 
 class Client:
     def __init__(self, spacing=2.0, browser_helper=None):
-        self.opener = request.build_opener(SameOrigin(), request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+        self.opener = request.build_opener(https_handler(), SameOrigin(), request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
         self.robots = {}
         self.last = {}
         self.spacing = spacing
