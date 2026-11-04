@@ -182,13 +182,17 @@ class NewsMonitor:
         self.stop_event = threading.Event()
         self.wake = threading.Event()
         self.client = Client()
+        # Failed sources are retried at startup and on manual refresh, so an
+        # error from an older version or a network blip doesn't linger for hours.
+        self.retry_failed = True
 
     def start(self):
         self.thread = threading.Thread(target=self.run, daemon=True, name='publisher-news')
         self.thread.start()
 
     def refresh(self):
-        # Existing source cooldowns are respected; newly added feeds are due immediately.
+        # Healthy sources keep their hourly cooldown; failed sources retry now.
+        self.retry_failed = True
         self.wake.set()
 
     def close(self):
@@ -196,16 +200,18 @@ class NewsMonitor:
         self.wake.set()
 
     def cycle(self):
+        retry, self.retry_failed = self.retry_failed, False
         for source in self.db.news_sources():
             if self.stop_event.is_set():
                 break
-            if not source['enabled'] or source['next_due'] > time.time():
+            due = source['next_due'] <= time.time() or (retry and source.get('error'))
+            if not source['enabled'] or not due:
                 continue
             try:
                 items = self.fetcher(source, self.client)
                 self.db.save_news(source['id'], items, time.time() + 3600)
             except Exception as e:
-                self.db.fail_news(source['id'], str(e), time.time() + 7200)
+                self.db.fail_news(source['id'], str(e), time.time() + 900)
             self.events.put(('news_updated', None))
 
     def run(self):
