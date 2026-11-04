@@ -1,4 +1,5 @@
 """GitHub release downloads, checked archives and atomic version directories."""
+from .tls import https_handler
 from contextlib import closing
 import hashlib,json,os,re,shutil,stat,tarfile,tempfile,threading,time,zipfile
 from pathlib import Path,PurePosixPath
@@ -31,7 +32,7 @@ class ReleaseRedirect(request.HTTPRedirectHandler):
 class Releases:
     def __init__(self,token=None):
         self.token=os.environ.get('TCG_ALERTS_GITHUB_TOKEN','') if token is None else token
-        self.opener=request.build_opener(ReleaseRedirect())
+        self.opener=request.build_opener(https_handler(), ReleaseRedirect())
     def open(self,url,binary=False):
         p=urlsplit(url)
         if p.scheme!='https' or p.hostname not in ('api.github.com','github.com'):raise ValueError('Release requests must start on GitHub.')

@@ -16,7 +16,15 @@ def now():
 
 def money(value):
     try:
-        d = Decimal(str(value))
+        text = str(value).strip()
+        # Accept everyday input such as "$1,299.50" or "A$ 45".
+        for prefix in ('A$', 'AU$', 'US$', 'C$', 'CA$', '$'):
+            if text.upper().startswith(prefix):
+                text = text[len(prefix):].strip()
+                break
+        if ',' in text and not all(len(g) == 3 for g in text.split('.')[0].split(',')[1:]):
+            raise InvalidOperation
+        d = Decimal(text.replace(',', ''))
         if not d.is_finite() or d < 0 or d.quantize(Decimal('.01')) != d:
             raise ValueError('Use a non-negative amount with at most two decimal places.')
         return int(d * 100)

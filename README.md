@@ -32,7 +32,9 @@ The result is `dist/TCGAlerts.exe`. Build on the target operating system; a Linu
 4. Read alerts using **Alerts** in the left menu. The app rings its bell when an alert occurs; native Windows tray notifications are available. Closing exits by default; optional close-to-tray continues while the PC is awake. A sleeping PC cannot collect observations.
 5. Compare stores by assigning identical products the same comparison group. Match language, set, edition, product type and quantity yourself. The table separates currencies, excludes failed/stale/paused listings, and leaves unknown delivered costs blank. It does not automatically normalize product names.
 
-The **Discover** tab reads one collection page and extracts same-store Shopify-style product links. Only Packs' Riftbound collection is prefilled as a convenient starting URL, not an endorsement. Select a result to create a watch. This is not exhaustive catalog discovery: pagination and JavaScript-only listings are not followed.
+The **Discover** tab has a searchable product catalogue. **Sync stores** reads each directory store's public Shopify `/products.json` listing (up to 5,000 products per store, robots.txt respected) into the local database. Search by name across all stores, filter by game or in-stock, and double-click a result to track its exact variant. Prices and stock in the catalogue are as of the last sync; watches check live. Non-Shopify stores show a sync failure.
+
+Below the catalogue, the tab can also read one collection page and extracts same-store Shopify-style product links. Only Packs' Riftbound collection is prefilled as a convenient starting URL, not an endorsement. Select a result to create a watch. This is not exhaustive catalog discovery: pagination and JavaScript-only listings are not followed.
 
 ## What works
 

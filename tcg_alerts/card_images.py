@@ -1,4 +1,5 @@
 """On-demand private artwork previews; no artwork is bundled or scraped in bulk."""
+from .tls import https_handler
 from io import BytesIO
 from urllib import request
 from pathlib import Path
@@ -27,7 +28,7 @@ def load(url='',path=''):
         if p.stat().st_size>LIMIT:raise ValueError('Artwork exceeds the 8 MB limit.')
         return decode(p.read_bytes())
     url=validate_url(url)
-    opener=request.build_opener(ImageRedirect())
+    opener=request.build_opener(https_handler(), ImageRedirect())
     req=request.Request(url,headers={'User-Agent':'TCGAlerts/0.4 (user-requested artwork preview)','Accept':'image/*'})
     with opener.open(req,timeout=15) as response:data=response.read(LIMIT+1)
     return decode(data)

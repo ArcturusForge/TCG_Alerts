@@ -1,8 +1,12 @@
+import unittest
 import json,os,queue,tempfile,time,unittest
 from pathlib import Path
 from unittest.mock import Mock
 from PIL import Image
-from tcg_alerts.visuals import ImageService
+try:
+    from tcg_alerts.visuals import ImageService
+except ModuleNotFoundError as e:  # Tk missing on headless CI
+    raise unittest.SkipTest(f'Tk unavailable: {e}')
 from tcg_alerts.card_catalogue import normalize_openrift,search
 from tcg_alerts.news import PublisherPage,attach_publisher_images,feed_items
 from tcg_alerts.core import Database,Observation

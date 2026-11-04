@@ -259,7 +259,21 @@ class App(tk.Tk):
         discovery = ttk.Frame(self.tabs, padding=18)
         self.discovery_page=discovery
         self.tabs.add(discovery, text='Discover')
-        ttk.Label(discovery, text='Find products on a store page', style='Heading.TLabel').pack(anchor='w')
+        ttk.Label(discovery, text='Search the product catalogue', style='Heading.TLabel').pack(anchor='w')
+        ttk.Label(discovery, text='Sync stores to pull their public product listings, then search every store at once. Prices and stock are as of the last sync; tracking checks them live.', style='Muted.TLabel', wraplength=1000).pack(anchor='w', pady=(4, 6))
+        cat_tools = ttk.Frame(discovery); cat_tools.pack(fill='x', pady=4)
+        self.catalogue_query = tk.StringVar(); self.catalogue_game = tk.StringVar(value='All games'); self.catalogue_stock = tk.BooleanVar(value=False)
+        query_entry = ttk.Entry(cat_tools, textvariable=self.catalogue_query, width=40); query_entry.pack(side='left', fill='x', expand=True)
+        query_entry.bind('<Return>', lambda e: self.search_catalogue())
+        ttk.Combobox(cat_tools, textvariable=self.catalogue_game, values=('All games',) + GAMES, state='readonly', width=20).pack(side='left', padx=6)
+        ttk.Checkbutton(cat_tools, text='In stock only', variable=self.catalogue_stock, command=self.search_catalogue).pack(side='left', padx=6)
+        ttk.Button(cat_tools, text='Search', command=self.search_catalogue).pack(side='left', padx=6)
+        self.catalogue_sync_button = ttk.Button(cat_tools, text='Sync stores', command=self.sync_catalogue); self.catalogue_sync_button.pack(side='right')
+        self.catalogue_table = self.make_table(discovery, [('title', 'Product', 420), ('store', 'Store', 160), ('game', 'Game', 110), ('price', 'Price', 90), ('stock', 'Stock', 90), ('url', 'URL', 300)])
+        self.catalogue_table.bind('<Double-1>', lambda e: self.track_catalogue())
+        ttk.Button(discovery, text='Track selected product', style='Accent.TButton', command=self.track_catalogue).pack(anchor='e', pady=6)
+        ttk.Separator(discovery).pack(fill='x', pady=8)
+        ttk.Label(discovery, text='Or find products on one store page', style='Heading.TLabel').pack(anchor='w')
         ttk.Label(discovery, text='Paste a collection URL. This reads one page, then lets you choose exact listings to track.\nResults are links, not verified products or prices. Pagination and JavaScript-only pages need manual URLs.', style='Muted.TLabel').pack(anchor='w', pady=10)
         discovery_tools = ttk.Frame(discovery)
         discovery_tools.pack(fill='x', pady=10)
@@ -345,6 +359,38 @@ class App(tk.Tk):
             except Exception as e:
                 self.monitor.events.put(('discovery_error', str(e)))
         threading.Thread(target=worker, daemon=True).start()
+
+    def search_catalogue(self):
+        from .product_catalogue import search
+        rows = search(self.db, self.catalogue_query.get(), self.catalogue_game.get(), self.catalogue_stock.get())
+        self.catalogue_table.delete(*self.catalogue_table.get_children())
+        for r in rows:
+            price = '' if r['price'] is None else f"{r['price']/100:,.2f}"
+            stock = {1: 'In stock', 0: 'Sold out'}.get(r['available'], 'Unknown')
+            self.catalogue_table.insert('', 'end', values=(r['title'], r['store'], r['game'], price, stock, r['url']))
+        self.status.set(f'{len(rows)} catalogue matches.' if rows else 'No matches. Sync stores first, or try fewer words.')
+
+    def sync_catalogue(self):
+        from .sources import Client
+        from .product_catalogue import sync_all
+        stores = [(s['name'], s['url']) for s in self.db.stores()]
+        self.catalogue_sync_button.configure(state='disabled')
+        self.status.set(f'Syncing {len(stores)} store catalogues…')
+        def worker():
+            self.monitor.events.put(('catalogue_synced', sync_all(self.db, Client(), stores)))
+        threading.Thread(target=worker, daemon=True).start()
+
+    def track_catalogue(self):
+        selection = self.catalogue_table.selection()
+        if not selection:
+            self.status.set('Select a product to track.'); return
+        title, store, game, *_rest, url = self.catalogue_table.item(selection[0], 'values')
+        dialog = WatchDialog(self, self.db, self.changed)
+        dialog.vars['url'].set(url)
+        dialog.vars['label'].set(title)
+        self.prefill_tags(dialog)
+        if game != 'Unspecified' and 'game' in dialog.vars:
+            dialog.vars['game'].set(game)
 
     def track_discovery(self):
         selection = self.discovery_table.selection()
@@ -610,6 +656,12 @@ class App(tk.Tk):
                         self.discovery_table.insert('', 'end', values=(title, url))
                     self.discover_button.configure(state='normal')
                     self.status.set(f'{len(payload)} product links found. Select one to track.')
+                elif kind == 'catalogue_synced':
+                    self.catalogue_sync_button.configure(state='normal')
+                    ok = sum(v for v in payload.values() if isinstance(v, int))
+                    failed = [k for k, v in payload.items() if not isinstance(v, int)]
+                    self.status.set(f'Catalogue synced: {ok} products.' + (f" Failed: {', '.join(failed)} (see Stores for details)." if failed else ''))
+                    self.search_catalogue()
                 elif kind == 'discovery_error':
                     self.discover_button.configure(state='normal')
                     self.status.set('Discovery failed: ' + payload)
