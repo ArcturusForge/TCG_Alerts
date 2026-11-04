@@ -53,3 +53,28 @@ def diagnostics():
     paths = ssl.get_default_verify_paths()
     return {'openssl': ssl.OPENSSL_VERSION, 'default_cafile': paths.cafile,
             'extra_bundles': ca_sources(), 'loaded_certificates': context().cert_store_stats().get('x509_ca', 0)}
+
+
+def probe(url, timeout=10):
+    """Open a TLS connection to url's host and return '' or a readable reason."""
+    import socket
+    from urllib.parse import urlsplit
+    host = urlsplit(url).hostname
+    try:
+        with socket.create_connection((host, 443), timeout=timeout) as raw:
+            with context().wrap_socket(raw, server_hostname=host):
+                return ''
+    except ssl.SSLCertVerificationError as e:
+        return f'{host}: certificate rejected ({e.verify_message or e.reason})'
+    except (OSError, ssl.SSLError) as e:
+        return f'{host}: {e}'
+
+
+def report(urls):
+    d = diagnostics()
+    lines = [f"OpenSSL: {d['openssl']}", f"Default CA file: {d['default_cafile']}",
+             f"Extra CA bundles: {', '.join(d['extra_bundles']) or 'none found'}",
+             f"Trusted root certificates loaded: {d['loaded_certificates']}", '']
+    for url in dict.fromkeys(urls):
+        lines.append(probe(url) or f'{url}: OK')
+    return '\n'.join(lines)

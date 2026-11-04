@@ -1,3 +1,3 @@
-TCG Alerts v0.7.0 adds a searchable product catalogue. On the Discover page, **Sync stores** pulls each directory store's public Shopify product listing. You can then search every store by name, game or stock and track an exact product without pasting links.
+TCG Alerts v0.7.1 fixes the Discover page. **Track selected** used to be pushed off the bottom of the window, so you couldn't add a product from the catalogue. The button now sits in the toolbar, and double-clicking or pressing Enter on a result also tracks it.
 
-It also fixes news and update downloads that failed on Linux with certificate errors. Certificate verification stays on, and the app now also loads the distro's CA bundle and certifi. Price fields now accept input such as `$1,299.50`.
+It also adds **Settings → Connection diagnostics**. It tests a secure connection to each news source and to GitHub, and shows which certificate bundles were loaded and why a certificate was rejected.

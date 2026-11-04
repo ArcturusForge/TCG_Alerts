@@ -263,32 +263,37 @@ class App(tk.Tk):
         ttk.Label(discovery, text='Sync stores to pull their public product listings, then search every store at once. Prices and stock are as of the last sync; tracking checks them live.', style='Muted.TLabel', wraplength=1000).pack(anchor='w', pady=(4, 6))
         cat_tools = ttk.Frame(discovery); cat_tools.pack(fill='x', pady=4)
         self.catalogue_query = tk.StringVar(); self.catalogue_game = tk.StringVar(value='All games'); self.catalogue_stock = tk.BooleanVar(value=False)
-        query_entry = ttk.Entry(cat_tools, textvariable=self.catalogue_query, width=40); query_entry.pack(side='left', fill='x', expand=True)
+        query_entry = ttk.Entry(cat_tools, textvariable=self.catalogue_query, width=24); query_entry.pack(side='left')
         query_entry.bind('<Return>', lambda e: self.search_catalogue())
-        ttk.Combobox(cat_tools, textvariable=self.catalogue_game, values=('All games',) + GAMES, state='readonly', width=20).pack(side='left', padx=6)
+        ttk.Combobox(cat_tools, textvariable=self.catalogue_game, values=('All games',) + GAMES, state='readonly', width=14).pack(side='left', padx=6)
         ttk.Checkbutton(cat_tools, text='In stock only', variable=self.catalogue_stock, command=self.search_catalogue).pack(side='left', padx=6)
         ttk.Button(cat_tools, text='Search', command=self.search_catalogue).pack(side='left', padx=6)
         self.catalogue_sync_button = ttk.Button(cat_tools, text='Sync stores', command=self.sync_catalogue); self.catalogue_sync_button.pack(side='right')
-        self.catalogue_table = self.make_table(discovery, [('title', 'Product', 420), ('store', 'Store', 160), ('game', 'Game', 110), ('price', 'Price', 90), ('stock', 'Stock', 90), ('url', 'URL', 300)])
+        ttk.Button(cat_tools, text='Track selected', style='Accent.TButton', command=self.track_catalogue).pack(side='right', padx=6)
+        self.catalogue_table = self.make_table(discovery, [('title', 'Product', 420), ('store', 'Store', 160), ('game', 'Game', 110), ('price', 'Price', 90), ('stock', 'Stock', 90), ('url', 'URL', 300)], expand=False)
+        self.catalogue_table.configure(height=6)
         self.catalogue_table.bind('<Double-1>', lambda e: self.track_catalogue())
-        ttk.Button(discovery, text='Track selected product', style='Accent.TButton', command=self.track_catalogue).pack(anchor='e', pady=6)
+        self.catalogue_table.bind('<Return>', lambda e: self.track_catalogue())
         ttk.Separator(discovery).pack(fill='x', pady=8)
         ttk.Label(discovery, text='Or find products on one store page', style='Heading.TLabel').pack(anchor='w')
         ttk.Label(discovery, text='Paste a collection URL. This reads one page, then lets you choose exact listings to track.\nResults are links, not verified products or prices. Pagination and JavaScript-only pages need manual URLs.', style='Muted.TLabel').pack(anchor='w', pady=10)
         discovery_tools = ttk.Frame(discovery)
         discovery_tools.pack(fill='x', pady=10)
         self.discovery_url = tk.StringVar(value='https://onlypackstcg.com.au/collections/riftbound')
-        ttk.Entry(discovery_tools, textvariable=self.discovery_url, width=70).pack(side='left', fill='x', expand=True)
+        ttk.Entry(discovery_tools, textvariable=self.discovery_url, width=50).pack(side='left', fill='x', expand=True)
         self.discover_button = ttk.Button(discovery_tools, text='Find links', command=self.start_discovery)
+        ttk.Button(discovery_tools, text='Track selected', command=self.track_discovery).pack(side='right')
         self.discover_button.pack(side='right', padx=10)
-        self.discovery_table = self.make_table(discovery, [('title', 'Store title', 400), ('url', 'Product URL', 600)])
-        ttk.Button(discovery, text='Track selected listing', command=self.track_discovery).pack(anchor='e', pady=10)
+        self.discovery_table = self.make_table(discovery, [('title', 'Store title', 400), ('url', 'Product URL', 600)], expand=False)
+        self.discovery_table.configure(height=5)
+        self.discovery_table.bind('<Double-1>', lambda e: self.track_discovery())
         settings = ttk.Frame(self.tabs, padding=20)
         self.tabs.add(settings, text='Settings & data')
         getting_started=ttk.Frame(settings);getting_started.pack(fill='x',pady=(0,10))
         ttk.Button(getting_started,text='Getting started (F1)',command=self.show_guide).pack(side='left')
         ttk.Button(getting_started,text='Game / store plugins',command=self.manage_plugins).pack(side='left',padx=10)
         ttk.Button(getting_started,text='Updates / browser helper',command=self.show_updates).pack(side='left',padx=10)
+        ttk.Button(getting_started,text='Connection diagnostics',command=self.connection_diagnostics).pack(side='left',padx=10)
         ttk.Label(settings, text='Private by default.', style='Heading.TLabel').pack(anchor='w')
         ttk.Label(settings, text='Checks run every 15 minutes while this app is open. Sleeping or closing the PC stops checks.\nFailures back off automatically. Manual checks respect the scheduled cooldown.\nAlerts are saved here and ring the bell. Windows native tray notifications are supported; email/Telegram are not configured.\nThe app reads public Shopify product data and single-offer JSON-LD pages.\nIt respects robots.txt and does not bypass login, CAPTCHA or blocked storefronts.\n\nYour database: ' + str(self.db.path), style='Muted.TLabel', wraplength=1000).pack(anchor='w', pady=18)
         self.native_enabled=tk.BooleanVar(value=self.db.setting('native_notifications',True))
@@ -310,6 +315,15 @@ class App(tk.Tk):
         self.bind('<Control-1>', lambda e: self.tabs.select(self.watch_page))
         self.bind('<Control-f>', self.focus_search)
         self.bind('<F1>',lambda e:self.show_guide())
+
+    def connection_diagnostics(self):
+        from .tls import report
+        urls=[r['url'] for r in self.db.news_sources() if r.get('url')]+['https://api.github.com']
+        self.status.set('Testing secure connections…')
+        def worker():
+            text=report(urls)
+            self.after(0,lambda:(messagebox.showinfo('Connection diagnostics',text,parent=self),self.status.set('Diagnostics finished.')))
+        threading.Thread(target=worker,daemon=True).start()
 
     def show_updates(self):
         from .updates_ui import show
@@ -424,9 +438,9 @@ class App(tk.Tk):
             if var.get() != all_value:
                 dialog.vars[key].set(var.get())
 
-    def make_table(self, parent, columns):
+    def make_table(self, parent, columns, expand=True):
         wrap = ttk.Frame(parent)
-        wrap.pack(fill='both', expand=True)
+        wrap.pack(fill='both', expand=expand)
         table = ttk.Treeview(wrap, columns=[c[0] for c in columns], show='headings', selectmode='browse')
         for key, label, width in columns:
             table.heading(key, text=label)
