@@ -93,3 +93,17 @@ class EngineTests(unittest.TestCase):
     def test_backup_onto_itself_rejected(self):
         with self.assertRaises(ValueError):
             self.db.backup(self.db.path)
+
+
+class MoneyInputTests(__import__('unittest').TestCase):
+    def test_accepts_symbols_and_thousands(self):
+        from tcg_alerts.core import money
+        self.assertEqual(money('$1,299.50'), 129950)
+        self.assertEqual(money(' A$ 45 '), 4500)
+        self.assertEqual(money('12.5'), 1250)
+
+    def test_rejects_ambiguous(self):
+        from tcg_alerts.core import money
+        for bad in ('12,50', '1,2,3', '-5', '1.234', 'abc'):
+            with self.assertRaises(ValueError):
+                money(bad)
